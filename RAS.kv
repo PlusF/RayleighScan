@@ -1,0 +1,175 @@
+#:kivy 1.0.9
+
+<YesNoDialog>:
+    RelativeLayout:
+        pos_hint: {'x': 0.5, 'y':0.5}
+        Label:
+            size_hint: 0.4, 0.3
+            pos_hint: {'x': -0.2, 'y': 0}
+            text: root.message
+        Button:
+            size_hint: 0.4, 0.4
+            pos_hint: {'x': -0.4, 'y': -0.5}
+            text: 'Yes'
+            on_release: root.yes()
+        Button:
+            size_hint: 0.4, 0.4
+            pos_hint: {'x': 0, 'y': -0.5}
+            text: 'Cancel'
+            on_release: root.cancel()
+
+<SaveDialog>:
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        FileChooserListView:
+            id: filechooser
+            path: root.folder
+            on_selection: text_input.text = self.selection and self.selection[0] or ''
+
+        TextInput:
+            id: text_input
+            size_hint_y: 0.1
+            multiline: False
+
+        BoxLayout:
+            size_hint_y: 0.2
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()
+
+            Button:
+                text: "Save"
+                on_release: root.save(filechooser.path, text_input.text)
+
+<RASDriver>:
+    current_temperature: 0
+    orientation: 'horizontal'
+
+    BoxLayout:
+        size_hint_x: 0.5
+        orientation: 'vertical'
+        BoxLayout:
+            size_hint_y: 0.6
+            orientation: 'horizontal'
+            BoxLayout:
+                orientation: 'vertical'
+                Label:
+                    text: 'Start'
+                Label:
+                    text: str(round(root.start_pos[0], 2))
+                Label:
+                    text: str(round(root.start_pos[1], 2))
+                Label:
+                    text: str(round(root.start_pos[2], 2))
+                Button:
+                    text: 'Set Start'
+                    on_release: root.set_start()
+            BoxLayout:
+                orientation: 'vertical'
+                Label:
+                    text: 'Current'
+                Label:
+                    text: str(round(root.current_pos[0], 2))
+                Label:
+                    text: str(round(root.current_pos[1], 2))
+                Label:
+                    text: str(round(root.current_pos[2], 2))
+                Label:
+                    text:
+            BoxLayout:
+                orientation: 'vertical'
+                Label:
+                    text: 'Goal'
+                Label:
+                    text: str(round(root.goal_pos[0], 2))
+                Label:
+                    text: str(round(root.goal_pos[1], 2))
+                Label:
+                    text: str(round(root.goal_pos[2], 2))
+                Button:
+                    text: 'Set Goal'
+                    on_release: root.set_goal()
+            BoxLayout:
+                orientation: 'vertical'
+                Label:
+                    text: 'Go to'
+                TextInput:
+                    id: input_pos_x
+                    multiline: False
+                TextInput:
+                    id: input_pos_y
+                    multiline: False
+                TextInput:
+                    id: input_pos_z
+                    multiline: False
+                Button:
+                    text: 'Go to'
+                    on_release: root.go(input_pos_x.text, input_pos_y.text, input_pos_z.text)
+        BoxLayout:
+            size_hint_y: 0.3
+            padding: [0, 30, 0, 0]
+            orientation: 'horizontal'
+            Button:
+                id: button_initialize
+                text: 'Initialize'
+                on_release: root.initialize()
+            BoxLayout:
+                orientation: 'vertical'
+                Label:
+                    text: str(root.current_temperature) + ' °C'
+                Label:
+                    text: '-80 °C'
+        BoxLayout:
+            size_hint_y: 0.2
+            orientation: 'horizontal'
+            Label:
+                text: 'Integration [s]'
+            TextInput:
+                id: input_integration
+                hint_text:'30'
+                pos_hint: {'center_y': 0.5}
+                size_hint: 0.95, 0.5
+                multiline: False
+                on_text: root.set_integration(input_integration.text)
+        BoxLayout:
+            size_hint_y: 0.2
+            orientation: 'horizontal'
+            Label:
+                text: 'Accumulation'
+            TextInput:
+                id: input_accumulation
+                hint_text:'1'
+                pos_hint: {'center_y': 0.5}
+                size_hint: 0.95, 0.5
+                multiline: False
+                on_text: root.set_accumulation(input_accumulation.text)
+        BoxLayout:
+            size_hint_y: 0.2
+            orientation: 'horizontal'
+            Label:
+                text: 'Scan interval [um]'
+            TextInput:
+                id: input_interval
+                hint_text:'1'
+                pos_hint: {'center_y': 0.5}
+                size_hint: 0.95, 0.5
+                multiline: False
+                on_text: root.set_interval(input_interval.text)
+        Button:
+            text: 'Acquire'
+            size_hint_y: 0.2
+            on_release: root.start_acquire()
+        Button:
+            text: 'Start Scan'
+            size_hint_y: 0.2
+            on_release: root.start_scan()
+        Button:
+            text: 'Save'
+            size_hint_y: 0.2
+            on_release: root.show_save()
+
+    BoxLayout:
+        id: graph
+        size_hint: 1, 1
