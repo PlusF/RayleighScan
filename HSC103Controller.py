@@ -34,6 +34,16 @@ class HSC103Controller:
                 self.send(msg)
                 print(msg, self.recv())
 
+    def is_busy(self):
+        order = 'Q:'
+        self.send(order)
+        msg = self.recv()
+        try:
+            busy_list = list(map(int, msg.split(',')))  # 1: busy, 0: ready
+        except ValueError:
+            busy_list = [-1, -1, -1]
+        return busy_list
+
     def get_position(self):
         order = 'Q:'
         self.send(order)

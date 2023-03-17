@@ -66,9 +66,9 @@ class RASDriver(BoxLayout):
         self.coord = np.array([])
 
         self.graph = Graph(
-            xlabel = 'Wavelength [nm]', ylabel = 'Counts',
-            xmin=0, xmax=1000, ymin=0, ymax=1000,
-            x_ticks_minor = 2, x_ticks_major = 100, y_ticks_minor = 2, y_ticks_major = 100,
+            xlabel = 'Pixel number', ylabel = 'Counts',
+            xmin=0, xmax=1023, ymin=0, ymax=1000,
+            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 100,y_ticks_minor = 2,
             y_grid_label = True, x_grid_label = True,
         )
         self.ids.graph.add_widget(self.graph)
@@ -139,7 +139,10 @@ class RASDriver(BoxLayout):
         self.prepare_acquisition()
         self.clear_things()
         self.progress_scan_value = 0
-        self.prepare_scan()
+        ok = self.prepare_scan()
+        if not ok:
+            self.msg = 'Stage is busy. Failed to start scan.'
+            return
         self.clock_acquire = Clock.schedule_interval(self.update_progress_acquire, 1)
         self.clock_scan = Clock.schedule_interval(self.update_progress_scan, 1)
         self.thread_scan = threading.Thread(target=self.scan)
@@ -188,9 +191,7 @@ class RASDriver(BoxLayout):
         self.msg = 'Cooling finished.'
 
     def update_graph(self):
-        self.xdata = np.linspace(0, 10, self.xpixels)
-        self.graph.xmin = float(np.min(self.xdata))
-        self.graph.xmax = float(np.max(self.xdata))
+        self.xdata = np.arange(0, self.xpixels, 1)
         self.graph.ymin = float(np.min(self.ydata.sum(axis=0)))
         self.graph.ymax = float(np.max(self.ydata.sum(axis=0)))
         self.lineplot.points = [(x, y) for x, y in zip(self.xdata, self.ydata.sum(axis=0))]
@@ -286,14 +287,27 @@ class RASDriver(BoxLayout):
         self.saved_previous = False
         self.ids.button_save.disabled = False
 
+    def check_stage_ready(self, timeout=5):
+        start_time = time.time()
+        while True:
+            if time.time() - start_time > timeout:
+                break
+            if self.cl.mode == 'RELEASE':
+                if sum(self.hsc.is_busy()) == 0:
+                    return True
+            elif self.cl.mode == 'DEBUG':
+                if sum(self.hsc.is_busy()) == -3:
+                    return True
+        return False
+
     def prepare_scan(self):
         # init
         self.hsc.set_speed_max()
-
         # move to start position
         self.hsc.move_abs(self.start_pos / UM_PER_PULSE)
         distance = np.linalg.norm(np.array(self.current_pos - self.start_pos) / UM_PER_PULSE)
-        time.sleep(distance / 40000 + 1)  # TODO: 到着を確認してから次に進む
+        time.sleep(distance / 4000000 + 1)
+        return self.check_stage_ready()
 
     def scan(self):
         start = self.start_pos / UM_PER_PULSE
@@ -304,9 +318,15 @@ class RASDriver(BoxLayout):
             self.msg = f'Acquisition {number} of {self.num_pos}... {time_left} minutes left.'
 
             point = start + (goal - start) * (number - 1) / (self.num_pos - 1)
-            self.hsc.move_abs(point)
-            distance = np.linalg.norm(np.array(point - start))
-            time.sleep(distance / 40000 + 1)  # TODO: 到着を確認してから次に進む
+            if self.cl.mode == 'RELEASE':
+                self.hsc.move_abs(point)
+                distance = np.linalg.norm(np.array(point - start))
+                time.sleep(distance / 4000000 + 1)
+            elif self.cl.mode == 'DEBUG':
+                self.current_pos = point * UM_PER_PULSE
+
+            if not self.check_stage_ready():
+                self.msg = f'Stage is busy. Scan stopped at #{number} scan.'
 
             self.acquire(stop_clock=False)
             number += 1
@@ -320,11 +340,11 @@ class RASDriver(BoxLayout):
         self.msg = 'Scan finished.'
 
     def update_progress_acquire(self, dt):
-        self.progress_acquire_value += 1 / self.integration / self.accumulation / 1.3  # なんとなく
+        self.progress_acquire_value += 1 / self.integration / self.accumulation / 1.2  # prevent from exceeding
         if self.progress_acquire_value > 1:
             self.progress_acquire_value -= 1
     def update_progress_scan(self, dt):
-        self.progress_scan_value += 1 / self.integration / self.accumulation / self.num_pos / 1.3  # なんとなく
+        self.progress_scan_value += 1 / self.integration / self.accumulation / (self.num_pos + 1) / 1.2  # prevent from exceeding
 
     def _popup_yes_acquire(self):
         # Start acquisition
@@ -349,9 +369,11 @@ class RASDriver(BoxLayout):
             f.write(f'# integration: {self.integration}\n')
             f.write(f'# accumulation: {self.accumulation}\n')
             f.write(f'# interval: {self.interval}\n')
-            f.write(f'index,pos_x,pos_y,pos_z,{",".join(self.xdata.astype(str))}\n')
-            for i, (pos, y) in enumerate(zip(self.coord.astype(str), self.ydata.astype(str))):
-                f.write(f'{",".join([str(i),*pos,*y])}\n')
+            f.write(f'pos_x,{",".join(self.coord[:, 0].astype(str))}\n')
+            f.write(f'pos_y,{",".join(self.coord[:, 1].astype(str))}\n')
+            f.write(f'pos_z,{",".join(self.coord[:, 2].astype(str))}\n')
+            for x, y in zip(self.xdata.astype(str), self.ydata.T.astype(str)):
+                f.write(f'{x},{",".join(y)}\n')
 
         self.popup_save.dismiss()
         self.saved_previous = True
