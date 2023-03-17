@@ -63,6 +63,7 @@
                 Label:
                     text: str(round(root.start_pos[2], 2))
                 Button:
+                    id: button_set_start
                     text: 'Set Start'
                     on_release: root.set_start()
             BoxLayout:
@@ -88,6 +89,7 @@
                 Label:
                     text: str(round(root.goal_pos[2], 2))
                 Button:
+                    id: button_set_goal
                     text: 'Set Goal'
                     on_release: root.set_goal()
             BoxLayout:
@@ -104,6 +106,7 @@
                     id: input_pos_z
                     multiline: False
                 Button:
+                    id: button_go
                     text: 'Go to'
                     on_release: root.go(input_pos_x.text, input_pos_y.text, input_pos_z.text)
         BoxLayout:
@@ -178,7 +181,11 @@
     BoxLayout:
         orientation: 'vertical'
         BoxLayout:
-            id: graph
+            id: graph_line
+            size_hint: 1, 1
+
+        BoxLayout:
+            id: graph_contour
             size_hint: 1, 1
 
         ProgressBar:

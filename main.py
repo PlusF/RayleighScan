@@ -3,7 +3,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.properties import NumericProperty, StringProperty, ObjectProperty
 from kivy.uix.popup import Popup
-from kivy_garden.graph import Graph, LinePlot
+from kivy_garden.graph import Graph, LinePlot, ContourPlot
 from kivy.config import Config
 Config.set('graphics', 'width', '1000')
 Config.set('graphics', 'height', '500')
@@ -48,7 +48,7 @@ class RASDriver(BoxLayout):
     integration = ObjectProperty(30)
     accumulation = ObjectProperty(1)
     interval = ObjectProperty(500)
-    msg = StringProperty('')
+    msg = StringProperty('Please initialize the detector.')
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         Window.bind(on_request_close=self.quit)
@@ -65,16 +65,30 @@ class RASDriver(BoxLayout):
         self.ydata = np.array([])
         self.coord = np.array([])
 
-        self.graph = Graph(
+        self.graph_line = Graph(
             xlabel = 'Pixel number', ylabel = 'Counts',
             xmin=0, xmax=1023, ymin=0, ymax=1000,
-            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 100,y_ticks_minor = 2,
-            y_grid_label = True, x_grid_label = True,
+            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 100, y_ticks_minor = 2,
+            x_grid_label = True, y_grid_label = True,
         )
-        self.ids.graph.add_widget(self.graph)
+        self.ids.graph_line.add_widget(self.graph_line)
         self.lineplot = LinePlot(color=[0, 1, 0, 1], line_width=1)
-        self.graph.add_plot(self.lineplot)
+        self.graph_line.add_plot(self.lineplot)
         self.lineplot.points = [(i, i) for i in range(1000)]
+
+        self.graph_contour = Graph(
+            xlabel = 'Pixel number', ylabel = 'Position',
+            xmin=0, xmax=1023, ymin=0, ymax=9,
+            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 5,
+            x_grid_label = True, y_grid_label = True,
+        )
+        self.ids.graph_contour.add_widget(self.graph_contour)
+        self.contourplot = ContourPlot()
+        self.graph_contour.add_plot(self.contourplot)
+        self.contourplot.xrange = (0, 1023)
+        self.contourplot.yrange = (0, 9)
+        self.contourplot.data = np.arange(0, 10).reshape([10, 1]) * np.ones([10, 1024])
+        self.contourplot.draw()
 
         self.ids.button_acquire.disabled = True
         self.ids.button_scan.disabled = True
@@ -126,7 +140,8 @@ class RASDriver(BoxLayout):
         self.prepare_acquisition()
         self.clear_things()
         self.num_pos = 1
-        self.clock_acquire = Clock.schedule_interval(self.update_progress_acquire, 1)
+        self.disable_buttons()
+        self.start_progress_acquire()
         self.thread_acq = threading.Thread(target=self.acquire)
         self.thread_acq.daemon = True
         self.thread_acq.start()
@@ -138,16 +153,40 @@ class RASDriver(BoxLayout):
             return
         self.prepare_acquisition()
         self.clear_things()
+        self.contourplot.data = np.random.random([1024, 10])  # TODO: avoid dividing by zero
         self.progress_scan_value = 0
         ok = self.prepare_scan()
         if not ok:
             self.msg = 'Stage is busy. Failed to start scan.'
             return
-        self.clock_acquire = Clock.schedule_interval(self.update_progress_acquire, 1)
-        self.clock_scan = Clock.schedule_interval(self.update_progress_scan, 1)
+        self.disable_buttons()
+        self.start_progress_acquire()
+        self.start_progress_scan()
         self.thread_scan = threading.Thread(target=self.scan)
         self.thread_scan.daemon = True
         self.thread_scan.start()
+
+    def start_progress_acquire(self):
+        self.progress_acquire_value = -1 / self.integration / self.accumulation / 1.2
+        self.clock_acquire = Clock.schedule_interval(self.update_progress_acquire, 1)
+
+    def start_progress_scan(self):
+        self.progress_scan_value = -1 / self.integration / self.accumulation / (self.num_pos + 1) / 1.2
+        self.clock_scan = Clock.schedule_interval(self.update_progress_scan, 1)
+
+    def disable_buttons(self):
+        self.ids.button_acquire.disabled = True
+        self.ids.button_scan.disabled = True
+        self.ids.button_set_start.disabled = True
+        self.ids.button_set_goal.disabled = True
+        self.ids.button_go.disabled = True
+
+    def activate_buttons(self):
+        self.ids.button_acquire.disabled = False
+        self.ids.button_scan.disabled = False
+        self.ids.button_set_start.disabled = False
+        self.ids.button_set_goal.disabled = False
+        self.ids.button_go.disabled = False
 
     def clear_things(self):
         self.ydata = np.empty([0, self.xpixels])
@@ -190,11 +229,23 @@ class RASDriver(BoxLayout):
             self.current_temperature = self.cl.temperature
         self.msg = 'Cooling finished.'
 
-    def update_graph(self):
+    def update_graph_line(self):
+        # TODO: show the spectrum accumulated
         self.xdata = np.arange(0, self.xpixels, 1)
-        self.graph.ymin = float(np.min(self.ydata.sum(axis=0)))
-        self.graph.ymax = float(np.max(self.ydata.sum(axis=0)))
-        self.lineplot.points = [(x, y) for x, y in zip(self.xdata, self.ydata.sum(axis=0))]
+        self.graph_line.xmin = float(np.min(self.xdata))
+        self.graph_line.xmax = float(np.max(self.xdata))
+        self.graph_line.ymin = float(np.min(self.ydata))
+        self.graph_line.ymax = float(max(np.max(self.ydata), np.min(self.ydata) + 0.1))
+        self.lineplot.points = [(x, y) for x, y in zip(self.xdata, self.ydata[-1])]
+
+    def update_graph_contour(self):
+        # TODO: show the spectrum accumulated
+        self.xdata = np.arange(0, self.xpixels, 1)
+        self.graph_contour.xmax = self.xpixels - 1
+        self.graph_contour.ymax = self.num_pos * self.accumulation - 1
+        self.contourplot.xrange = (0, self.xpixels - 1)
+        self.contourplot.yrange = (0, self.num_pos * self.accumulation - 1)
+        self.contourplot.data = self.ydata.reshape(self.ydata.shape[::-1])
 
     def update_position(self):
         while True:
@@ -224,18 +275,21 @@ class RASDriver(BoxLayout):
             pass
 
     def set_integration(self, val):
+        # TODO: check the value
         try:
             self.integration = float(val)
         except ValueError:
             self.msg = 'Invalid value.'
 
     def set_accumulation(self, val):
+        # TODO: check the value
         try:
             self.accumulation = int(val)
         except ValueError:
             self.msg = 'Invalid value.'
 
     def set_interval(self, val):
+        # TODO: check the value
         try:
             self.interval = float(val)
         except ValueError:
@@ -263,7 +317,7 @@ class RASDriver(BoxLayout):
         elif self.cl.mode == 'DEBUG':
             print('prepare acquisition')
 
-    def acquire(self, stop_clock=True):
+    def acquire(self, during_scan=False):
         for i in range(self.accumulation):
             if self.cl.mode == 'RELEASE':
                 self.sdk.handle_return(self.sdk.StartAcquisition())
@@ -274,15 +328,14 @@ class RASDriver(BoxLayout):
             elif self.cl.mode == 'DEBUG':
                 time.sleep(self.integration)
                 print(f'acquired {i}')
-                spec = np.sin(np.linspace(0, np.random.random() * 10, self.xpixels))
-                self.ydata = np.append(self.ydata, np.array([spec]), axis=0)
-            if len(self.ydata) == 0:
-                raise ValueError('something went wrong')
+                spec = np.expand_dims(np.sin(np.linspace(-1, 1, self.xpixels)), axis=0) * np.random.randint(1, 5)
+                self.ydata = np.append(self.ydata, spec, axis=0)
             self.coord = np.append(self.coord, self.current_pos.reshape([1, 3]), axis=0)
-            self.update_graph()
+            self.update_graph_line()
 
-        if stop_clock:
+        if not during_scan:
             Clock.unschedule(self.clock_acquire)
+            self.activate_buttons()
         self.progress_acquire_value = 1
         self.saved_previous = False
         self.ids.button_save.disabled = False
@@ -328,13 +381,15 @@ class RASDriver(BoxLayout):
             if not self.check_stage_ready():
                 self.msg = f'Stage is busy. Scan stopped at #{number} scan.'
 
-            self.acquire(stop_clock=False)
+            self.acquire(during_scan=True)
+            self.update_graph_contour()
             number += 1
 
         self.progress_acquire_value = 1
         self.progress_scan_value = 1
         Clock.unschedule(self.clock_acquire)
         Clock.unschedule(self.clock_scan)
+        self.activate_buttons()
         self.saved_previous = False
         self.ids.button_save.disabled = False
         self.msg = 'Scan finished.'
