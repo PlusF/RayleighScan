@@ -3,6 +3,9 @@ class HSC103Controller:
         self.ser = ser
         self.end = '\r\n'
 
+        self.um_per_pulse = 0.01
+        self.max_speed = 4000000 * self.um_per_pulse  # [um]
+
         self.check_status()
 
     def send(self, order: str):
@@ -54,11 +57,11 @@ class HSC103Controller:
             pos_list = [0, 0, 0]
         return pos_list
 
-    def move_abs(self, values: list):
+    def move_abs(self, values):
         """
 
         Args:
-            values (list(int)): 各軸の移動量[pulse]を指定．1 pulse あたり 0.01 μm 進む．
+            values (list(int)): 各軸の移動量[um]を指定．
 
         Returns:
             bool (bool): 返答がOKならTrue．
@@ -69,14 +72,14 @@ class HSC103Controller:
             print('move value list must contain three values')
             return False
 
-        order = 'A:' + ','.join([str(int(val)) for val in values])
+        order = 'A:' + ','.join([str(int(val * self.um_per_pulse)) for val in values])
         self.send(order)
 
-    def move_linear(self, coord: list):
+    def move_linear(self, coord):
         """
 
         Args:
-            coord (list(int)): 現在位置から見た終点の位置 [pulse]．1 pulse あたり 0.01 μm 進む．
+            coord (list(int)): 現在位置から見た終点の位置．
 
         Returns:
             bool (bool): 返答がOKならTrue．
@@ -87,10 +90,10 @@ class HSC103Controller:
             print('stop list must contain [axis1(0 or 1), axis2(0 or 1), axis3(0 or 1)]')
             return False
 
-        order = 'K:' + ','.join([str(int(val)) for val in [1, 2, 3] + coord])
+        order = 'K:' + ','.join([str(int(val * self.um_per_pulse)) for val in [1, 2, 3] + coord])
         self.send(order)
 
-    def jog(self, args: list):
+    def jog(self, args):
         """
 
         Args:
@@ -122,7 +125,7 @@ class HSC103Controller:
         order = 'L:E'
         self.send(order)
 
-    def set_speed(self, args: list):
+    def set_speed(self, args):
         """
         移動速度の指定．
         Args:
@@ -143,16 +146,18 @@ class HSC103Controller:
         if axis not in [1, 2, 3]:
             print('axis number must be 1 ~ 3')
             return False
-        if start < 1 or 4000000 < start or final < 1 or 4000000 < final or final < start or rate < 1 or 1000 < rate:
+        if start < 1 or self.max_speed / self.um_per_pulse < start \
+                or final < 1 or self.max_speed / self.um_per_pulse < final or final < start \
+                or rate < 1 or 1000 < rate:
             print('speed value out of range.\n1<=slow<=fast<=4000000, 1<=rate<=1000.')
             return False
 
         order = 'D:' + ','.join([str(int(val)) for val in args])
         self.send(order)
 
-    def set_speed_all(self, args: list):
+    def set_speed_all(self, args):
         for i in range(1, 4):
             self.set_speed([i] + args)
 
     def set_speed_max(self):
-        return self.set_speed_all([2000000, 4000000, 1])
+        return self.set_speed_all([self.max_speed / self.um_per_pulse / 10, self.max_speed / self.um_per_pulse, 1])

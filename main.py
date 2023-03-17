@@ -22,8 +22,6 @@ import threading
 from ConfigLoader import ConfigLoader
 from HSC103Controller import HSC103Controller
 
-UM_PER_PULSE = 0.01
-
 
 class SaveDialog(FloatLayout):
     save = ObjectProperty(None)
@@ -270,7 +268,7 @@ class RASDriver(BoxLayout):
             print('invalid value.')
             return
 
-        pos = (np.array([x, y, z], float) - self.current_pos) / UM_PER_PULSE
+        pos = np.array([x, y, z], float) - self.current_pos
         if self.cl.mode == 'RELEASE':
             self.hsc.move_linear(pos)
         elif self.cl.mode == 'DEBUG':
@@ -284,18 +282,20 @@ class RASDriver(BoxLayout):
             self.msg = 'Invalid value.'
 
     def set_accumulation(self, val):
-        # TODO: check the value
         try:
             self.accumulation = int(val)
         except ValueError:
             self.msg = 'Invalid value.'
 
     def set_interval(self, val):
-        # TODO: check the value
         try:
             self.interval = float(val)
         except ValueError:
             self.msg = 'invalid value.'
+
+        if self.interval <= 0:
+            self.msg = 'invalid value.'
+            self.interval = 1
 
     def start_acquire(self):
         if self.saved_previous:
@@ -314,7 +314,7 @@ class RASDriver(BoxLayout):
             self.sdk.handle_return(self.sdk.SetAcquisitionMode(atmcd_codes.Acquisition_Mode.SINGLE_SCAN))
             self.sdk.handle_return(self.sdk.SetReadMode(atmcd_codes.Read_Mode.FULL_VERTICAL_BINNING))
             self.sdk.handle_return(self.sdk.SetTriggerMode(atmcd_codes.Trigger_Mode.INTERNAL))
-            self.sdk.handle_return(self.sdk.SetExposureTime(self.integration))  # TODO: 露光時間入力の例外処理
+            self.sdk.handle_return(self.sdk.SetExposureTime(self.integration))
             self.sdk.handle_return(self.sdk.PrepareAcquisition())
         elif self.cl.mode == 'DEBUG':
             print('prepare acquisition')
@@ -357,26 +357,24 @@ class RASDriver(BoxLayout):
 
     def prepare_scan(self):
         self.hsc.set_speed_max()
-        self.hsc.move_abs(self.start_pos / UM_PER_PULSE)
-        distance = np.linalg.norm(np.array(self.current_pos - self.start_pos) / UM_PER_PULSE)
-        time.sleep(distance / 4000000 + 1)
+        self.hsc.move_abs(self.start_pos)
+        distance = np.max(self.current_pos - self.start_pos)
+        time.sleep(distance / self.hsc.max_speed + 1)
         return self.check_stage_ready()
 
     def scan(self):
-        start = self.start_pos / UM_PER_PULSE
-        goal = self.goal_pos / UM_PER_PULSE
         number = 0
         while number < self.num_pos:
             time_left = np.ceil((self.num_pos - number) * self.integration * 2  * self.accumulation / 60)
             self.msg = f'Acquisition {number + 1} of {self.num_pos}... {time_left} minutes left.'
 
-            point = start + (goal - start) * number / (self.num_pos - 1)
+            point = self.start + (self.goal - self.start) * number / (self.num_pos - 1)
             if self.cl.mode == 'RELEASE':
                 self.hsc.move_abs(point)
-                distance = np.linalg.norm(np.array(point - start))
-                time.sleep(distance / 4000000 + 1)
+                distance = np.max(self.current_pos - self.start_pos)
+                time.sleep(distance / self.hsc.max_speed + 1)
             elif self.cl.mode == 'DEBUG':
-                self.current_pos = point * UM_PER_PULSE
+                self.current_pos = point
 
             if not self.check_stage_ready():
                 self.msg = f'Stage is busy. Scan stopped at #{number} scan.'
