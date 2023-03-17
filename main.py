@@ -366,7 +366,7 @@ class RASDriver(BoxLayout):
         start = self.start_pos / UM_PER_PULSE
         goal = self.goal_pos / UM_PER_PULSE
         number = 0
-        while number <= self.num_pos:
+        while number < self.num_pos:
             time_left = np.ceil((self.num_pos - number) * self.integration * 2  * self.accumulation / 60)
             self.msg = f'Acquisition {number + 1} of {self.num_pos}... {time_left} minutes left.'
 
