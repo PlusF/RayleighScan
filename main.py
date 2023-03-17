@@ -153,7 +153,9 @@ class RASDriver(BoxLayout):
             return
         self.prepare_acquisition()
         self.clear_things()
-        self.contourplot.data = np.random.random([1024, 10])  # TODO: avoid dividing by zero
+        black = np.zeros([1024, 1024])
+        black[0, 0] = 1
+        self.contourplot.data = black
         self.progress_scan_value = 0
         ok = self.prepare_scan()
         if not ok:
@@ -354,9 +356,7 @@ class RASDriver(BoxLayout):
         return False
 
     def prepare_scan(self):
-        # init
         self.hsc.set_speed_max()
-        # move to start position
         self.hsc.move_abs(self.start_pos / UM_PER_PULSE)
         distance = np.linalg.norm(np.array(self.current_pos - self.start_pos) / UM_PER_PULSE)
         time.sleep(distance / 4000000 + 1)
@@ -365,12 +365,12 @@ class RASDriver(BoxLayout):
     def scan(self):
         start = self.start_pos / UM_PER_PULSE
         goal = self.goal_pos / UM_PER_PULSE
-        number = 1
+        number = 0
         while number <= self.num_pos:
-            time_left = np.ceil((self.num_pos - number + 1) * self.integration * 2  * self.accumulation / 60)
-            self.msg = f'Acquisition {number} of {self.num_pos}... {time_left} minutes left.'
+            time_left = np.ceil((self.num_pos - number) * self.integration * 2  * self.accumulation / 60)
+            self.msg = f'Acquisition {number + 1} of {self.num_pos}... {time_left} minutes left.'
 
-            point = start + (goal - start) * (number - 1) / (self.num_pos - 1)
+            point = start + (goal - start) * number / (self.num_pos - 1)
             if self.cl.mode == 'RELEASE':
                 self.hsc.move_abs(point)
                 distance = np.linalg.norm(np.array(point - start))
@@ -380,6 +380,7 @@ class RASDriver(BoxLayout):
 
             if not self.check_stage_ready():
                 self.msg = f'Stage is busy. Scan stopped at #{number} scan.'
+                break
 
             self.acquire(during_scan=True)
             self.update_graph_contour()
@@ -402,17 +403,12 @@ class RASDriver(BoxLayout):
         self.progress_scan_value += 1 / self.integration / self.accumulation / (self.num_pos + 1) / 1.2  # prevent from exceeding
 
     def _popup_yes_acquire(self):
-        # Start acquisition
         self.create_and_start_thread_acquire()
         self.popup_acquire.dismiss()
 
     def _popup_yes_scan(self):
-        # Start scan
         self.create_and_start_thread_scan()
         self.popup_scan.dismiss()
-
-    def show_save(self):
-        self.popup_save.open()
 
     def save(self, path, filename):
         if not '.' in filename:
