@@ -65,14 +65,14 @@ class RASDriver(BoxLayout):
 
         self.graph_line = Graph(
             xlabel = 'Pixel number', ylabel = 'Counts',
-            xmin=0, xmax=1023, ymin=0, ymax=1000,
-            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 100, y_ticks_minor = 2,
+            xmin=0, xmax=1023, ymin=0, ymax=1023,
+            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 200,
             x_grid_label = True, y_grid_label = True,
         )
         self.ids.graph_line.add_widget(self.graph_line)
         self.lineplot = LinePlot(color=[0, 1, 0, 1], line_width=1)
         self.graph_line.add_plot(self.lineplot)
-        self.lineplot.points = [(i, i) for i in range(1000)]
+        self.lineplot.points = [(i, i) for i in range(1024)]
 
         self.graph_contour = Graph(
             xlabel = 'Pixel number', ylabel = 'Position',
@@ -368,7 +368,7 @@ class RASDriver(BoxLayout):
             time_left = np.ceil((self.num_pos - number) * self.integration * 2  * self.accumulation / 60)
             self.msg = f'Acquisition {number + 1} of {self.num_pos}... {time_left} minutes left.'
 
-            point = self.start + (self.goal - self.start) * number / (self.num_pos - 1)
+            point = self.start_pos + (self.goal_pos - self.start_pos) * number / (self.num_pos - 1)
             if self.cl.mode == 'RELEASE':
                 self.hsc.move_abs(point)
                 distance = np.max(self.current_pos - self.start_pos)
