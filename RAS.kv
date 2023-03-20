@@ -65,7 +65,7 @@
                 Button:
                     id: button_set_start
                     text: 'Set Start'
-                    on_release: root.set_start()
+                    on_release: root.start_pos = root.current_pos
             BoxLayout:
                 orientation: 'vertical'
                 Label:
@@ -91,7 +91,7 @@
                 Button:
                     id: button_set_goal
                     text: 'Set Goal'
-                    on_release: root.set_goal()
+                    on_release: root.goal_pos = root.current_pos
             BoxLayout:
                 orientation: 'vertical'
                 Label:

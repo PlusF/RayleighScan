@@ -63,30 +63,7 @@ class RASDriver(BoxLayout):
         self.ydata = np.array([])
         self.coord = np.array([])
 
-        self.graph_line = Graph(
-            xlabel = 'Pixel number', ylabel = 'Counts',
-            xmin=0, xmax=1023, ymin=0, ymax=1023,
-            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 200,
-            x_grid_label = True, y_grid_label = True,
-        )
-        self.ids.graph_line.add_widget(self.graph_line)
-        self.lineplot = LinePlot(color=[0, 1, 0, 1], line_width=1)
-        self.graph_line.add_plot(self.lineplot)
-        self.lineplot.points = [(i, i) for i in range(1024)]
-
-        self.graph_contour = Graph(
-            xlabel = 'Pixel number', ylabel = 'Position',
-            xmin=0, xmax=1023, ymin=0, ymax=9,
-            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 5,
-            x_grid_label = True, y_grid_label = True,
-        )
-        self.ids.graph_contour.add_widget(self.graph_contour)
-        self.contourplot = ContourPlot()
-        self.graph_contour.add_plot(self.contourplot)
-        self.contourplot.xrange = (0, 1023)
-        self.contourplot.yrange = (0, 9)
-        self.contourplot.data = np.arange(0, 10).reshape([10, 1]) * np.ones([10, 1024])
-        self.contourplot.draw()
+        self.create_graph()
 
         self.ids.button_acquire.disabled = True
         self.ids.button_scan.disabled = True
@@ -111,6 +88,34 @@ class RASDriver(BoxLayout):
 
         self.open_ports()
         self.create_and_start_thread_position()
+
+    def create_graph(self):
+        # for spectrum
+        self.graph_line = Graph(
+            xlabel = 'Pixel number', ylabel = 'Counts',
+            xmin=0, xmax=1023, ymin=0, ymax=1023,
+            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 200,
+            x_grid_label = True, y_grid_label = True,
+        )
+        self.ids.graph_line.add_widget(self.graph_line)
+        self.lineplot = LinePlot(color=[0, 1, 0, 1], line_width=1)
+        self.graph_line.add_plot(self.lineplot)
+        self.lineplot.points = [(i, i) for i in range(1024)]
+
+        # for mapping
+        self.graph_contour = Graph(
+            xlabel = 'Pixel number', ylabel = 'Position',
+            xmin=0, xmax=1023, ymin=0, ymax=9,
+            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 5,
+            x_grid_label = True, y_grid_label = True,
+        )
+        self.ids.graph_contour.add_widget(self.graph_contour)
+        self.contourplot = ContourPlot()
+        self.graph_contour.add_plot(self.contourplot)
+        self.contourplot.xrange = (0, 1023)
+        self.contourplot.yrange = (0, 9)
+        self.contourplot.data = np.arange(0, 10).reshape([10, 1]) * np.ones([10, 1024])
+        self.contourplot.draw()
 
     def open_ports(self):
         if self.cl.mode == 'RELEASE':
@@ -255,17 +260,11 @@ class RASDriver(BoxLayout):
                 pass
             time.sleep(self.cl.dt * 0.001)
 
-    def set_start(self):
-        self.start_pos = self.current_pos
-
-    def set_goal(self):
-        self.goal_pos = self.current_pos
-
     def go(self, x, y, z):
         try:
             self.current_pos = np.array([x, y, z], float)
         except ValueError:
-            print('invalid value.')
+            self.msg = 'invalid value.'
             return
 
         pos = np.array([x, y, z], float) - self.current_pos
@@ -297,6 +296,13 @@ class RASDriver(BoxLayout):
             self.msg = 'invalid value.'
             self.interval = 1
 
+    def update_progress_acquire(self, dt):
+        self.progress_acquire_value += 1 / self.integration / self.accumulation / 1.2  # prevent from exceeding
+        if self.progress_acquire_value > 1:
+            self.progress_acquire_value -= 1
+    def update_progress_scan(self, dt):
+        self.progress_scan_value += 1 / self.integration / self.accumulation / (self.num_pos + 1) / 1.2  # prevent from exceeding
+
     def start_acquire(self):
         if self.saved_previous:
             self.create_and_start_thread_acquire()
@@ -308,6 +314,14 @@ class RASDriver(BoxLayout):
             self.create_and_start_thread_scan()
             return
         self.popup_scan.open()
+
+    def _popup_yes_acquire(self):
+        self.create_and_start_thread_acquire()
+        self.popup_acquire.dismiss()
+
+    def _popup_yes_scan(self):
+        self.create_and_start_thread_scan()
+        self.popup_scan.dismiss()
 
     def prepare_acquisition(self):
         if self.cl.mode == 'RELEASE':
@@ -325,12 +339,12 @@ class RASDriver(BoxLayout):
                 self.sdk.handle_return(self.sdk.StartAcquisition())
                 self.sdk.handle_return(self.sdk.WaitForAcquisition())
                 ret, spec, first, last = self.sdk.GetImages16(1, 1, self.xpixels)
-                self.ydata = np.append(self.ydata, np.array([spec]), axis=0)
+                self.ydata = np.append(self.ydata, spec, axis=0)
                 self.sdk.handle_return(ret)
             elif self.cl.mode == 'DEBUG':
                 time.sleep(self.integration)
                 print(f'acquired {i}')
-                spec = np.expand_dims(np.sin(np.linspace(-1, 1, self.xpixels)), axis=0) * np.random.randint(1, 5)
+                spec = np.expand_dims(np.sin(np.linspace(-np.pi, np.pi, self.xpixels)), axis=0) * np.random.randint(1, 10)
                 self.ydata = np.append(self.ydata, spec, axis=0)
             self.coord = np.append(self.coord, self.current_pos.reshape([1, 3]), axis=0)
             self.update_graph_line()
@@ -393,21 +407,6 @@ class RASDriver(BoxLayout):
         self.ids.button_save.disabled = False
         self.msg = 'Scan finished.'
 
-    def update_progress_acquire(self, dt):
-        self.progress_acquire_value += 1 / self.integration / self.accumulation / 1.2  # prevent from exceeding
-        if self.progress_acquire_value > 1:
-            self.progress_acquire_value -= 1
-    def update_progress_scan(self, dt):
-        self.progress_scan_value += 1 / self.integration / self.accumulation / (self.num_pos + 1) / 1.2  # prevent from exceeding
-
-    def _popup_yes_acquire(self):
-        self.create_and_start_thread_acquire()
-        self.popup_acquire.dismiss()
-
-    def _popup_yes_scan(self):
-        self.create_and_start_thread_scan()
-        self.popup_scan.dismiss()
-
     def save(self, path, filename):
         if not '.' in filename:
             filename += '.txt'
@@ -427,6 +426,7 @@ class RASDriver(BoxLayout):
         self.popup_save.dismiss()
         self.saved_previous = True
         self.popup_save.folder = path
+        self.msg = f'Successfully saved to "{os.path.join(path, filename)}".'
 
     def quit(self, instance):
         if self.cl.mode == 'RELEASE':
