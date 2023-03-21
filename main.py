@@ -20,7 +20,7 @@ import time
 import serial
 import threading
 from ConfigLoader import ConfigLoader
-from HSC103Controller import HSC103Controller
+from hsc103controller import HSC103Controller
 
 
 class SaveDialog(FloatLayout):
