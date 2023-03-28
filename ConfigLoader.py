@@ -11,3 +11,4 @@ class ConfigLoader:
         self.baudrate = int(config['BAUDRATE'])
         self.temperature = int(config['TEMPERATURE'])
         self.folder = config['FOLDER']
+        self.cosmic_ray_removal = config['COSMICRAYREMOVAL']

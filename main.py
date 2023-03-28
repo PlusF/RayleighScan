@@ -21,6 +21,7 @@ import serial
 import threading
 from ConfigLoader import ConfigLoader
 from hsc103controller import HSC103Controller
+from utils import remove_cosmic_ray
 
 
 class SaveDialog(FloatLayout):
@@ -249,8 +250,12 @@ class RASDriver(BoxLayout):
         self.graph_contour.xmax = self.xpixels - 1
         self.graph_contour.ymax = self.num_pos * self.accumulation - 1
         self.contourplot.xrange = (0, self.xpixels - 1)
-        self.contourplot.yrange = (0, self.num_pos * self.accumulation - 1)
-        self.contourplot.data = self.ydata.reshape(self.ydata.shape[::-1])
+        self.contourplot.yrange = (0, len(self.ydata) - 1)
+
+        map_data = self.ydata
+        if self.cl.cosmic_ray_removal:
+            map_data = remove_cosmic_ray(map_data)
+        self.contourplot.data = map_data.reshape(self.ydata.shape[::-1])
 
     def update_position(self):
         while True:
@@ -345,6 +350,10 @@ class RASDriver(BoxLayout):
                 time.sleep(self.integration)
                 print(f'acquired {i}')
                 spec = np.expand_dims(np.sin(np.linspace(-np.pi, np.pi, self.xpixels)), axis=0) * np.random.randint(1, 10)
+                noise = np.random.random(self.xpixels) * 10
+                cosmic_ray = np.zeros(self.xpixels)
+                cosmic_ray[np.random.randint(0, self.xpixels)] = 100
+                spec += noise + cosmic_ray
                 self.ydata = np.append(self.ydata, spec, axis=0)
             self.coord = np.append(self.coord, self.current_pos.reshape([1, 3]), axis=0)
             self.update_graph_line()
