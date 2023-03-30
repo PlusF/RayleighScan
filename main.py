@@ -13,7 +13,7 @@ import os
 if os.name == 'nt':
     from pyAndorSDK2 import atmcd, atmcd_codes, atmcd_errors
 else:
-    atmcd =  atmcd_codes = atmcd_errors = None
+    atmcd = atmcd_codes = atmcd_errors = None
 import numpy as np
 import datetime
 import time
@@ -48,6 +48,7 @@ class RASDriver(BoxLayout):
     accumulation = ObjectProperty(1)
     interval = ObjectProperty(500)
     msg = StringProperty('Please initialize the detector.')
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         Window.bind(on_request_close=self.quit)
@@ -78,12 +79,12 @@ class RASDriver(BoxLayout):
         )
         self.popup_scan = Popup(
             title="Confirmation",
-            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_scan, cancel=lambda :self.popup_scan.dismiss()),
+            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_scan, cancel=lambda _: self.popup_scan.dismiss()),
             size_hint=(0.4, 0.3)
         )
         self.popup_save = Popup(
             title="Save file",
-            content=SaveDialog(save=self.save, cancel=lambda :self.popup_save.dismiss(), folder=self.folder),
+            content=SaveDialog(save=self.save, cancel=lambda _: self.popup_save.dismiss(), folder=self.folder),
             size_hint=(0.9, 0.9)
         )
 
@@ -93,10 +94,10 @@ class RASDriver(BoxLayout):
     def create_graph(self):
         # for spectrum
         self.graph_line = Graph(
-            xlabel = 'Pixel number', ylabel = 'Counts',
+            xlabel='Pixel number', ylabel='Counts',
             xmin=0, xmax=1023, ymin=0, ymax=1023,
-            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 200,
-            x_grid_label = True, y_grid_label = True,
+            x_ticks_major=100, x_ticks_minor=2, y_ticks_major=200,
+            x_grid_label=True, y_grid_label=True,
         )
         self.ids.graph_line.add_widget(self.graph_line)
         self.lineplot = LinePlot(color=[0, 1, 0, 1], line_width=1)
@@ -105,10 +106,10 @@ class RASDriver(BoxLayout):
 
         # for mapping
         self.graph_contour = Graph(
-            xlabel = 'Pixel number', ylabel = 'Position',
+            xlabel='Pixel number', ylabel='Position',
             xmin=0, xmax=1023, ymin=0, ymax=9,
-            x_ticks_major = 100, x_ticks_minor = 2, y_ticks_major = 5,
-            x_grid_label = True, y_grid_label = True,
+            x_ticks_major=100, x_ticks_minor=2, y_ticks_major=5,
+            x_grid_label=True, y_grid_label=True,
         )
         self.ids.graph_contour.add_widget(self.graph_contour)
         self.contourplot = ContourPlot()
@@ -237,24 +238,29 @@ class RASDriver(BoxLayout):
 
     def update_graph_line(self):
         # TODO: show the spectrum accumulated
+        ydata = self.ydata
+        if self.cl.cosmic_ray_removal:
+            ydata = remove_cosmic_ray(ydata)
+
         self.xdata = np.arange(0, self.xpixels, 1)
         self.graph_line.xmin = float(np.min(self.xdata))
         self.graph_line.xmax = float(np.max(self.xdata))
-        self.graph_line.ymin = float(np.min(self.ydata))
-        self.graph_line.ymax = float(max(np.max(self.ydata), np.min(self.ydata) + 0.1))
-        self.lineplot.points = [(x, y) for x, y in zip(self.xdata, self.ydata[-1])]
+        self.graph_line.ymin = float(np.min(ydata))
+        self.graph_line.ymax = float(max(np.max(ydata), np.min(ydata) + 0.1))
+        self.lineplot.points = [(x, y) for x, y in zip(self.xdata, ydata[-1])]
 
     def update_graph_contour(self):
         # TODO: show the spectrum accumulated
+        map_data = self.ydata
+        if self.cl.cosmic_ray_removal:
+            map_data = remove_cosmic_ray(map_data)
+
         self.xdata = np.arange(0, self.xpixels, 1)
         self.graph_contour.xmax = self.xpixels - 1
         self.graph_contour.ymax = self.num_pos * self.accumulation - 1
         self.contourplot.xrange = (0, self.xpixels - 1)
         self.contourplot.yrange = (0, len(self.ydata) - 1)
 
-        map_data = self.ydata
-        if self.cl.cosmic_ray_removal:
-            map_data = remove_cosmic_ray(map_data)
         self.contourplot.data = map_data.reshape(self.ydata.shape[::-1])
 
     def update_position(self):
@@ -267,14 +273,13 @@ class RASDriver(BoxLayout):
 
     def go(self, x, y, z):
         try:
-            self.current_pos = np.array([x, y, z], float)
+            pos = np.array([x, y, z], float)
         except ValueError:
             self.msg = 'invalid value.'
             return
 
-        pos = np.array([x, y, z], float) - self.current_pos
         if self.cl.mode == 'RELEASE':
-            self.hsc.move_linear(pos)
+            self.hsc.move_linear(pos - self.current_pos)
         elif self.cl.mode == 'DEBUG':
             pass
 
@@ -305,6 +310,7 @@ class RASDriver(BoxLayout):
         self.progress_acquire_value += 1 / self.integration / self.accumulation / 1.2  # prevent from exceeding
         if self.progress_acquire_value > 1:
             self.progress_acquire_value -= 1
+
     def update_progress_scan(self, dt):
         self.progress_scan_value += 1 / self.integration / self.accumulation / (self.num_pos + 1) / 1.2  # prevent from exceeding
 
@@ -344,7 +350,7 @@ class RASDriver(BoxLayout):
                 self.sdk.handle_return(self.sdk.StartAcquisition())
                 self.sdk.handle_return(self.sdk.WaitForAcquisition())
                 ret, spec, first, last = self.sdk.GetImages16(1, 1, self.xpixels)
-                self.ydata = np.append(self.ydata, spec, axis=0)
+                self.ydata = np.append(self.ydata, np.array([spec]), axis=0)
                 self.sdk.handle_return(ret)
             elif self.cl.mode == 'DEBUG':
                 time.sleep(self.integration)
@@ -388,7 +394,7 @@ class RASDriver(BoxLayout):
     def scan(self):
         number = 0
         while number < self.num_pos:
-            time_left = np.ceil((self.num_pos - number) * self.integration * 2  * self.accumulation / 60)
+            time_left = np.ceil((self.num_pos - number) * self.integration * self.accumulation / 60)
             self.msg = f'Acquisition {number + 1} of {self.num_pos}... {time_left} minutes left.'
 
             point = self.start_pos + (self.goal_pos - self.start_pos) * number / (self.num_pos - 1)
@@ -399,7 +405,7 @@ class RASDriver(BoxLayout):
             elif self.cl.mode == 'DEBUG':
                 self.current_pos = point
 
-            if not self.check_stage_ready():
+            if not self.check_stage_ready():  # TODO: check if it works
                 self.msg = f'Stage is busy. Scan stopped at #{number} scan.'
                 break
 
@@ -417,7 +423,8 @@ class RASDriver(BoxLayout):
         self.msg = 'Scan finished.'
 
     def save(self, path, filename):
-        if not '.' in filename:
+        filename = os.path.basename(filename)
+        if '.txt' not in filename:
             filename += '.txt'
 
         with open(os.path.join(path, filename), 'w') as f:
