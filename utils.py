@@ -6,6 +6,8 @@ def remove_cosmic_ray_1d(spectrum: np.ndarray, width: int, threshold: float):
     intensity = np.diff(spectrum)
     median_int = np.median(intensity)
     mad_int = np.median([np.abs(intensity - median_int)])
+    if mad_int == 0:
+        mad_int = 1e-4
     modified_scores = 0.6745 * (intensity - median_int) / mad_int
     spikes = abs(modified_scores) > threshold
 
