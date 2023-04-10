@@ -97,12 +97,18 @@
                     text: 'Go to'
                 TextInput:
                     id: input_pos_x
+                    halign: 'center'
+                    valign: 'center'
                     multiline: False
                 TextInput:
                     id: input_pos_y
+                    halign: 'center'
+                    valign: 'center'
                     multiline: False
                 TextInput:
                     id: input_pos_z
+                    halign: 'center'
+                    valign: 'center'
                     multiline: False
                 Button:
                     id: button_go
@@ -128,6 +134,8 @@
             TextInput:
                 id: input_integration
                 text: str(root.integration)
+                halign: 'center'
+                valign: 'center'
                 hint_text:'30'
                 pos_hint: {'center_y': 0.5}
                 multiline: False
@@ -140,6 +148,8 @@
             TextInput:
                 id: input_accumulation
                 text: str(root.accumulation)
+                halign: 'center'
+                valign: 'center'
                 hint_text:'1'
                 pos_hint: {'center_y': 0.5}
                 multiline: False
@@ -152,6 +162,8 @@
             TextInput:
                 id: input_interval
                 text: str(root.interval)
+                halign: 'center'
+                valign: 'center'
                 hint_text:'1'
                 pos_hint: {'center_y': 0.5}
                 multiline: False
