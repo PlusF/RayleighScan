@@ -45,8 +45,8 @@ class RASDriver(BoxLayout):
     progress_acquire_value = ObjectProperty(0)
     progress_scan_value = ObjectProperty(0)
     integration = ObjectProperty(30)
-    accumulation = ObjectProperty(1)
-    interval = ObjectProperty(500)
+    accumulation = ObjectProperty(3)
+    interval = ObjectProperty(50)
     msg = StringProperty('Please initialize the detector.')
 
     def __init__(self, **kwargs):
