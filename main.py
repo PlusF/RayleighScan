@@ -245,8 +245,8 @@ class RASDriver(BoxLayout):
         self.xdata = np.arange(0, self.xpixels, 1)
         self.graph_line.xmin = float(np.min(self.xdata))
         self.graph_line.xmax = float(np.max(self.xdata))
-        self.graph_line.ymin = float(np.min(ydata))
-        self.graph_line.ymax = float(max(np.max(ydata), np.min(ydata) + 0.1))
+        self.graph_line.ymin = float(np.min(ydata[-1]))
+        self.graph_line.ymax = float(max(np.max(ydata[-1]), np.min(ydata[-1]) + 0.1))
         self.lineplot.points = [(x, y) for x, y in zip(self.xdata, ydata[-1])]
 
     def update_graph_contour(self):
