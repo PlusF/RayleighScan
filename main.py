@@ -286,9 +286,16 @@ class RASDriver(BoxLayout):
     def set_integration(self, val):
         # TODO: check the value
         try:
-            self.integration = float(val)
+            integration = float(val)
         except ValueError:
             self.msg = 'Invalid value.'
+            return
+
+        if not (0.03 <= integration <= 120):  # なんとなく120秒を上限に．宇宙線の量を考えると妥当か？
+            self.msg = 'Invalid value.'
+            return
+
+        self.integration = integration
 
     def set_accumulation(self, val):
         try:
