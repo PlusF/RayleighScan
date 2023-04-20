@@ -284,7 +284,6 @@ class RASDriver(BoxLayout):
             pass
 
     def set_integration(self, val):
-        # TODO: check the value
         try:
             integration = float(val)
         except ValueError:
