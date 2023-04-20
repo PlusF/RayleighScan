@@ -74,17 +74,17 @@ class RASDriver(BoxLayout):
         self.saved_previous = True
         self.popup_acquire = Popup(
             title="Confirmation",
-            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_acquire, cancel=lambda :self.popup_acquire.dismiss()),
+            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_acquire, cancel=self.popup_acquire.dismiss),
             size_hint=(0.4, 0.3)
         )
         self.popup_scan = Popup(
             title="Confirmation",
-            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_scan, cancel=lambda _: self.popup_scan.dismiss()),
+            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_scan, cancel=self.popup_scan.dismiss),
             size_hint=(0.4, 0.3)
         )
         self.popup_save = Popup(
             title="Save file",
-            content=SaveDialog(save=self.save, cancel=lambda _: self.popup_save.dismiss(), folder=self.folder),
+            content=SaveDialog(save=self.save, cancel=self.popup_save.dismiss, folder=self.folder),
             size_hint=(0.9, 0.9)
         )
 
