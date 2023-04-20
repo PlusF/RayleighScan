@@ -231,7 +231,7 @@ class RASDriver(BoxLayout):
                 ret, self.current_temperature = self.sdk.GetTemperature()
                 if ret == atmcd_errors.Error_Codes.DRV_TEMP_STABILIZED:
                     break
-                time.sleep(self.cl.dt * 0.001)
+                time.sleep(self.cl.dt)
         elif self.cl.mode == 'DEBUG':
             self.current_temperature = self.cl.temperature
         self.msg = 'Cooling finished.'
@@ -269,7 +269,7 @@ class RASDriver(BoxLayout):
                 self.current_pos = np.array(self.hsc.get_position())
             elif self.cl.mode == 'DEBUG':
                 pass
-            time.sleep(self.cl.dt * 0.001)
+            time.sleep(self.cl.dt)
 
     def go(self, x, y, z):
         try:
@@ -371,19 +371,6 @@ class RASDriver(BoxLayout):
         self.saved_previous = False
         self.ids.button_save.disabled = False
 
-    def check_stage_ready(self, timeout=5):
-        start_time = time.time()
-        while True:
-            if time.time() - start_time > timeout:
-                break
-            if self.cl.mode == 'RELEASE':
-                if sum(self.hsc.is_busy()) == 0:
-                    return True
-            elif self.cl.mode == 'DEBUG':
-                if sum(self.hsc.is_busy()) == -3:
-                    return True
-        return False
-
     def prepare_scan(self):
         self.hsc.set_speed_max()
         self.hsc.move_abs(self.start_pos)
@@ -404,10 +391,6 @@ class RASDriver(BoxLayout):
                 time.sleep(distance / self.hsc.max_speed + 1)
             elif self.cl.mode == 'DEBUG':
                 self.current_pos = point
-
-            if not self.check_stage_ready():  # TODO: check if it works
-                self.msg = f'Stage is busy. Scan stopped at #{number} scan.'
-                break
 
             self.acquire(during_scan=True)
             self.update_graph_contour()
