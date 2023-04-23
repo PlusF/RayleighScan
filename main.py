@@ -74,17 +74,17 @@ class RASDriver(BoxLayout):
         self.saved_previous = True
         self.popup_acquire = Popup(
             title="Confirmation",
-            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_acquire, cancel=self.popup_acquire.dismiss),
+            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_acquire, cancel=lambda:self.popup_acquire.dismiss()),
             size_hint=(0.4, 0.3)
         )
         self.popup_scan = Popup(
             title="Confirmation",
-            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_scan, cancel=self.popup_scan.dismiss),
+            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_scan, cancel=lambda:self.popup_scan.dismiss()),
             size_hint=(0.4, 0.3)
         )
         self.popup_save = Popup(
             title="Save file",
-            content=SaveDialog(save=self.save, cancel=self.popup_save.dismiss, folder=self.folder),
+            content=SaveDialog(save=self.save, cancel=lambda:self.popup_save.dismiss(), folder=self.folder),
             size_hint=(0.9, 0.9)
         )
 
@@ -162,10 +162,7 @@ class RASDriver(BoxLayout):
         black[0, 0] = 1
         self.contourplot.data = black
         self.progress_scan_value = 0
-        ok = self.prepare_scan()
-        if not ok:
-            self.msg = 'Stage is busy. Failed to start scan.'
-            return
+        self.prepare_scan()
         self.disable_buttons()
         self.start_progress_acquire()
         self.start_progress_scan()
@@ -228,9 +225,10 @@ class RASDriver(BoxLayout):
     def update_temperature(self):
         if self.cl.mode == 'RELEASE':
             while True:
-                ret, self.current_temperature = self.sdk.GetTemperature()
+                ret, temperature = self.sdk.GetTemperature()
                 if ret == atmcd_errors.Error_Codes.DRV_TEMP_STABILIZED:
                     break
+                self.current_temperature = temperature
                 time.sleep(self.cl.dt)
         elif self.cl.mode == 'DEBUG':
             self.current_temperature = self.cl.temperature
@@ -292,25 +290,38 @@ class RASDriver(BoxLayout):
 
         if not (0.03 <= integration <= 120):  # なんとなく120秒を上限に．宇宙線の量を考えると妥当か？
             self.msg = 'Invalid value.'
-            return
-
-        self.integration = integration
+            self.integration = 30
+        else:
+            self.msg = 'Set integration time.'
+            self.integration = integration
 
     def set_accumulation(self, val):
         try:
-            self.accumulation = int(val)
+            accumulation = int(val)
         except ValueError:
             self.msg = 'Invalid value.'
+            return
+
+        if accumulation < 1:
+            self.msg = 'Invalid value.'
+            self.accumulation = 1
+        else:
+            self.msg = 'Set accumulation.'
+            self.accumulation = accumulation
 
     def set_interval(self, val):
         try:
-            self.interval = float(val)
+            interval = float(val)
         except ValueError:
-            self.msg = 'invalid value.'
+            self.msg = 'Invalid value.'
+            return
 
-        if self.interval <= 0:
-            self.msg = 'invalid value.'
+        if interval <= 0:
+            self.msg = 'Invalid value.'
             self.interval = 1
+        else:
+            self.msg = 'Set interval.'
+            self.interval = interval
 
     def update_progress_acquire(self, dt):
         self.progress_acquire_value += 1 / self.integration / self.accumulation / 1.2  # prevent from exceeding
@@ -382,7 +393,6 @@ class RASDriver(BoxLayout):
         self.hsc.move_abs(self.start_pos)
         distance = np.max(self.current_pos - self.start_pos)
         time.sleep(distance / self.hsc.max_speed + 1)
-        return self.check_stage_ready()
 
     def scan(self):
         number = 0
