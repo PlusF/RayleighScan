@@ -47,7 +47,9 @@ class RASDriver(BoxLayout):
     integration = ObjectProperty(30)
     accumulation = ObjectProperty(3)
     interval = ObjectProperty(50)
+    actual_interval = ObjectProperty(50)
     num_pos = ObjectProperty(10)
+    actual_num_pos = ObjectProperty(10)
     msg = StringProperty('Please initialize the detector.')
 
     def __init__(self, **kwargs):
@@ -65,6 +67,14 @@ class RASDriver(BoxLayout):
         self.xdata = np.array([])
         self.ydata = np.array([])
         self.coord = np.array([])
+
+        self.validate_state_dict = {
+            'temperature': False,
+            'integration': True,
+            'accumulation': True,
+            'interval': True,
+            'num_pos': True,
+        }
 
         self.create_graph()
 
@@ -145,7 +155,6 @@ class RASDriver(BoxLayout):
     def create_and_start_thread_acquire(self):
         self.prepare_acquisition()
         self.clear_things()
-        self.num_pos = 1
         self.disable_buttons()
         self.start_progress_acquire()
         self.thread_acq = threading.Thread(target=self.acquire)
@@ -153,10 +162,23 @@ class RASDriver(BoxLayout):
         self.thread_acq.start()
 
     def create_and_start_thread_scan(self):
-        self.num_pos = int(np.linalg.norm(self.goal_pos - self.start_pos) // self.interval + 1)
-        if self.num_pos == 1:
-            self.msg = 'Check the interval value again.'
-            return
+        use_interval = self.ids.toggle_interval.state == 'down'
+        use_num_pos = self.ids.toggle_num_pos.state == 'down'
+        if use_interval:
+            if self.interval == 0:
+                self.msg = 'Check the interval value again.'
+                return
+            # interval指定でscanするときは、num_posが2以上にならなければいけない
+            self.actual_num_pos = int(np.linalg.norm(self.goal_pos - self.start_pos) // self.interval + 1)
+            if self.actual_num_pos <= 1:
+                self.msg = 'Check the interval value again.'
+                return
+            self.actual_interval = self.interval
+        elif use_num_pos:
+            # num_pos指定の場合は同じ場所で何回も取得することを許す
+            self.actual_num_pos = self.num_pos
+            self.actual_interval = np.linalg.norm(self.goal_pos - self.start_pos) / self.actual_num_pos
+
         self.prepare_acquisition()
         self.clear_things()
         black = np.zeros([1024, 1024])
@@ -176,10 +198,11 @@ class RASDriver(BoxLayout):
         self.clock_acquire = Clock.schedule_interval(self.update_progress_acquire, 1)
 
     def start_progress_scan(self):
-        self.progress_scan_value = -1 / self.integration / self.accumulation / (self.num_pos + 1) / 1.2
+        self.progress_scan_value = -1 / self.integration / self.accumulation / (self.actual_num_pos + 1) / 1.2
         self.clock_scan = Clock.schedule_interval(self.update_progress_scan, 1)
 
     def disable_buttons(self):
+        # 測定中はボタンを押させない
         self.ids.button_acquire.disabled = True
         self.ids.button_scan.disabled = True
         self.ids.button_set_start.disabled = True
@@ -187,6 +210,7 @@ class RASDriver(BoxLayout):
         self.ids.button_go.disabled = True
 
     def activate_buttons(self):
+        # 測定終了後操作を許可
         self.ids.button_acquire.disabled = False
         self.ids.button_scan.disabled = False
         self.ids.button_set_start.disabled = False
@@ -214,9 +238,6 @@ class RASDriver(BoxLayout):
             self.ids.button_initialize.disabled = True
         self.create_and_start_thread_cool()
 
-        self.ids.button_acquire.disabled = False
-        self.ids.button_scan.disabled = False
-
         if self.cl.mode == 'RELEASE':
             ret, self.xpixels, ypixels = self.sdk.GetDetector()
             self.sdk.handle_return(ret)
@@ -234,6 +255,12 @@ class RASDriver(BoxLayout):
         elif self.cl.mode == 'DEBUG':
             self.current_temperature = self.cl.temperature
         self.msg = 'Cooling finished.'
+        self.validate_state_dict['temperature'] = True
+
+        # 他のパラメータも問題ない場合、スペクトル取得を許可
+        if all(self.validate_state_dict.values()):
+            self.ids.button_acquire.disabled = False
+            self.ids.button_scan.disabled = False
 
     def update_graph_line(self):
         # TODO: show the spectrum accumulated
@@ -256,7 +283,7 @@ class RASDriver(BoxLayout):
 
         self.xdata = np.arange(0, self.xpixels, 1)
         self.graph_contour.xmax = self.xpixels - 1
-        self.graph_contour.ymax = self.num_pos * self.accumulation - 1
+        self.graph_contour.ymax = self.actual_num_pos * self.accumulation - 1
         self.contourplot.xrange = (0, self.xpixels - 1)
         self.contourplot.yrange = (0, len(self.ydata) - 1)
 
@@ -287,50 +314,58 @@ class RASDriver(BoxLayout):
         if self.cl.mode == 'RELEASE':
             self.hsc.move_linear(pos - self.current_pos)
         elif self.cl.mode == 'DEBUG':
-            pass
+            self.current_pos = pos
+
+    def set_param(self, name, val, dtype, validate):
+        # 各種パラメータの設定関数の一般化
+        self.ids.button_acquire.disabled = True
+        self.ids.button_scan.disabled = True
+        self.validate_state_dict[name] = False
+
+        try:
+            val_casted = dtype(val)
+        except ValueError:
+            self.msg = f'Invalid value at {name}.'
+            return
+
+        if validate(val_casted):
+            self.msg = f'Set {name}.'
+            exec("self.%s = %d" % (name, val_casted))
+        else:
+            self.msg = f'Invalid value at {name}.'
+            return
+
+        if name not in self.validate_state_dict:
+            raise KeyError(f'key: {name} does not exist in validate_state_dict')
+        self.validate_state_dict[name] = True
+
+        if all(self.validate_state_dict.values()):
+            self.ids.button_acquire.disabled = False
+            self.ids.button_scan.disabled = False
 
     def set_integration(self, val):
-        try:
-            integration = float(val)
-        except ValueError:
-            self.msg = 'Invalid value.'
-            return
-
-        if not (0.03 <= integration <= 120):  # なんとなく120秒を上限に．宇宙線の量を考えると妥当か？
-            self.msg = 'Invalid value.'
-            self.integration = 30
-        else:
-            self.msg = 'Set integration time.'
-            self.integration = integration
+        self.set_param(
+            name='integration',
+            val=val,
+            dtype=float,
+            validate=lambda x: 0.03 <= x <= 120  # なんとなく120秒を上限に．宇宙線の量を考えると妥当か？
+        )
 
     def set_accumulation(self, val):
-        try:
-            accumulation = int(val)
-        except ValueError:
-            self.msg = 'Invalid value.'
-            return
-
-        if accumulation < 1:
-            self.msg = 'Invalid value.'
-            self.accumulation = 1
-        else:
-            self.msg = 'Set accumulation.'
-            self.accumulation = accumulation
+        self.set_param(
+            name='accumulation',
+            val=val,
+            dtype=int,
+            validate=lambda x: x >= 1
+        )
 
     def set_interval(self, val):
-        try:
-            interval = float(val)
-        except ValueError:
-            self.msg = 'Invalid value.'
-            return
-
-        if interval <= 0:
-            self.msg = 'Invalid value.'
-            self.interval = 1
-        else:
-            self.msg = 'Set interval.'
-            self.interval = interval
-
+        self.set_param(
+            name='interval',
+            val=val,
+            dtype=float,
+            validate=lambda x: x > 0
+        )
         self.ids.toggle_interval.state = 'down'
         self.apply_interval()
 
@@ -342,21 +377,16 @@ class RASDriver(BoxLayout):
             self.ids.toggle_num_pos.state = 'down'
 
     def set_num_pos(self, val):
-        try:
-            num_pos = int(val)
-        except ValueError:
-            self.msg = 'Invalid value.'
-            return
-
-        if num_pos <= 0:
-            self.msg = 'Invalid value.'
-            self.num_pos = 1
-        else:
-            self.msg = 'Set num_pos.'
-            self.num_pos = num_pos
+        self.set_param(
+            name='num_pos',
+            val=val,
+            dtype=int,
+            validate=lambda x: x > 0)
 
         self.ids.toggle_num_pos.state = 'down'
         self.apply_num_pos()
+
+        return True
 
     def apply_num_pos(self):
         state = self.ids.toggle_num_pos.state
@@ -371,7 +401,7 @@ class RASDriver(BoxLayout):
             self.progress_acquire_value -= 1
 
     def update_progress_scan(self, dt):
-        self.progress_scan_value += 1 / self.integration / self.accumulation / (self.num_pos + 1) / 1.2  # prevent from exceeding
+        self.progress_scan_value += 1 / self.integration / self.accumulation / (self.actual_num_pos + 1) / 1.2  # prevent from exceeding
 
     def start_acquire(self):
         if self.saved_previous:
@@ -437,22 +467,22 @@ class RASDriver(BoxLayout):
         time.sleep(distance / self.hsc.max_speed + 1)
 
     def scan(self):
-        number = 0
-        while number < self.num_pos:
-            time_left = np.ceil((self.num_pos - number) * self.integration * self.accumulation / 60)
-            self.msg = f'Acquisition {number + 1} of {self.num_pos}... {time_left} minutes left.'
+        for i in range(self.actual_num_pos):
+            time_left = np.ceil((self.actual_num_pos - i) * self.integration * self.accumulation / 60)
+            self.msg = f'Acquisition {i + 1} of {self.actual_num_pos}... {time_left} minutes left. (interval: {self.actual_interval})'
 
-            point = self.start_pos + (self.goal_pos - self.start_pos) * number / (self.num_pos - 1)
-            if self.cl.mode == 'RELEASE':
-                self.hsc.move_abs(point)
-                distance = np.max(self.current_pos - self.start_pos)
-                time.sleep(distance / self.hsc.max_speed + 1)
-            elif self.cl.mode == 'DEBUG':
-                self.current_pos = point
+            # 移動が必要なとき(同じ場所での測定では移動はいらない)
+            if self.actual_num_pos > 1:
+                point = self.start_pos + (self.goal_pos - self.start_pos) * i / (self.actual_num_pos - 1)
+                if self.cl.mode == 'RELEASE':
+                    self.hsc.move_abs(point)
+                    distance = np.max(self.current_pos - self.start_pos)
+                    time.sleep(distance / self.hsc.max_speed + 1)
+                elif self.cl.mode == 'DEBUG':
+                    self.current_pos = point
 
             self.acquire(during_scan=True)
             self.update_graph_contour()
-            number += 1
 
         self.progress_acquire_value = 1
         self.progress_scan_value = 1
