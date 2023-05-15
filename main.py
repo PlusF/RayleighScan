@@ -264,10 +264,17 @@ class RASDriver(BoxLayout):
 
     def update_position(self):
         while True:
-            if self.cl.mode == 'RELEASE':
-                self.current_pos = np.array(self.hsc.get_position())
-            elif self.cl.mode == 'DEBUG':
-                pass
+            self.hsc.get_position()
+            msg = self.hsc.recv()
+
+            try:
+                pos_list = list(map(lambda x: int(x) * self.hsc.um_per_pulse, msg.split(',')))
+            except ValueError:
+                print(msg)
+                time.sleep(self.cl.dt)
+                continue
+
+            self.current_pos = np.array(pos_list)
             time.sleep(self.cl.dt)
 
     def go(self, x, y, z):
