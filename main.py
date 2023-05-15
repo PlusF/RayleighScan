@@ -47,6 +47,7 @@ class RASDriver(BoxLayout):
     integration = ObjectProperty(30)
     accumulation = ObjectProperty(3)
     interval = ObjectProperty(50)
+    num_pos = ObjectProperty(10)
     msg = StringProperty('Please initialize the detector.')
 
     def __init__(self, **kwargs):
@@ -322,6 +323,40 @@ class RASDriver(BoxLayout):
         else:
             self.msg = 'Set interval.'
             self.interval = interval
+
+        self.ids.toggle_interval.state = 'down'
+        self.apply_interval()
+
+    def apply_interval(self):
+        state = self.ids.toggle_interval.state
+        if state == 'down':
+            self.ids.toggle_num_pos.state = 'normal'
+        elif state == 'normal':
+            self.ids.toggle_num_pos.state = 'down'
+
+    def set_num_pos(self, val):
+        try:
+            num_pos = int(val)
+        except ValueError:
+            self.msg = 'Invalid value.'
+            return
+
+        if num_pos <= 0:
+            self.msg = 'Invalid value.'
+            self.num_pos = 1
+        else:
+            self.msg = 'Set num_pos.'
+            self.num_pos = num_pos
+
+        self.ids.toggle_num_pos.state = 'down'
+        self.apply_num_pos()
+
+    def apply_num_pos(self):
+        state = self.ids.toggle_num_pos.state
+        if state == 'down':
+            self.ids.toggle_interval.state = 'normal'
+        elif state == 'normal':
+            self.ids.toggle_interval.state = 'down'
 
     def update_progress_acquire(self, dt):
         self.progress_acquire_value += 1 / self.integration / self.accumulation / 1.2  # prevent from exceeding

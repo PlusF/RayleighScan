@@ -157,8 +157,11 @@
         BoxLayout:
             size_hint_y: 0.12
             orientation: 'horizontal'
-            Label:
+            ToggleButton:
+                id: toggle_interval
                 text: 'Scan interval [um]'
+                on_release: root.apply_interval()
+                state: 'down'
             TextInput:
                 id: input_interval
                 text: str(root.interval)
@@ -168,6 +171,23 @@
                 pos_hint: {'center_y': 0.5}
                 multiline: False
                 on_text: root.set_interval(input_interval.text)
+        BoxLayout:
+            size_hint_y: 0.12
+            orientation: 'horizontal'
+            ToggleButton:
+                id: toggle_num_pos
+                text: 'Number of positions'
+                on_release: root.apply_num_pos()
+                state: 'normal'
+            TextInput:
+                id: input_num_pos
+                text: str(root.num_pos)
+                halign: 'center'
+                valign: 'center'
+                hint_text:'1'
+                pos_hint: {'center_y': 0.5}
+                multiline: False
+                on_text: root.set_num_pos(input_num_pos.text)
         Button:
             id: button_acquire
             text: 'Acquire'
