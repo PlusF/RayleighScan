@@ -42,8 +42,8 @@ class RASDriver(BoxLayout):
     start_pos = ObjectProperty(np.zeros(3), force_dispatch=True)
     current_pos = ObjectProperty(np.zeros(3), force_dispatch=True)
     goal_pos = ObjectProperty(np.zeros(3), force_dispatch=True)
-    progress_acquire_value = ObjectProperty(0)
-    progress_scan_value = ObjectProperty(0)
+    progress_bar_value_acquire = ObjectProperty(0)
+    progress_bar_value_scan = ObjectProperty(0)
     integration = ObjectProperty(30)
     accumulation = ObjectProperty(3)
     interval = ObjectProperty(50)
@@ -131,6 +131,7 @@ class RASDriver(BoxLayout):
         self.contourplot.draw()
 
     def open_ports(self):
+        # 各装置との接続を開く
         if self.cl.mode == 'RELEASE':
             self.sdk = atmcd()
             self.ser = serial.Serial(self.cl.port, self.cl.baudrate, write_timeout=0)
@@ -143,63 +144,61 @@ class RASDriver(BoxLayout):
             raise ValueError('Error with config.json. mode must be DEBUG or RELEASE.')
 
     def create_and_start_thread_position(self):
+        # 画面が停止しないよう、座標の更新は別スレッドを立てて行う
         self.thread_pos = threading.Thread(target=self.update_position)
         self.thread_pos.daemon = True
         self.thread_pos.start()
 
     def create_and_start_thread_cool(self):
+        # 画面が停止しないよう、温度の監視は別スレッドを立てて行う
         self.thread_cool = threading.Thread(target=self.update_temperature)
         self.thread_cool.daemon = True
         self.thread_cool.start()
 
     def create_and_start_thread_acquire(self):
+        # 画面が停止しないよう、acquireは別スレッドを立てて行う
         self.prepare_acquisition()
-        self.clear_things()
-        self.disable_buttons()
-        self.start_progress_acquire()
         self.thread_acq = threading.Thread(target=self.acquire)
         self.thread_acq.daemon = True
         self.thread_acq.start()
 
     def create_and_start_thread_scan(self):
+        # 画面が停止しないよう、スキャンは別スレッドを立てて行う
+        self.prepare_scan()
+        self.thread_scan = threading.Thread(target=self.scan)
+        self.thread_scan.daemon = True
+        self.thread_scan.start()
+
+    def set_interval_or_num_pos(self):
+        # スキャンの前にintervalまたはnum_posの値が正しいか確認
         use_interval = self.ids.toggle_interval.state == 'down'
         use_num_pos = self.ids.toggle_num_pos.state == 'down'
         if use_interval:
             if self.interval == 0:
                 self.msg = 'Check the interval value again.'
-                return
+                return False
             # interval指定でscanするときは、num_posが2以上にならなければいけない
             self.actual_num_pos = int(np.linalg.norm(self.goal_pos - self.start_pos) // self.interval + 1)
             if self.actual_num_pos <= 1:
                 self.msg = 'Check the interval value again.'
-                return
+                return False
             self.actual_interval = self.interval
         elif use_num_pos:
             # num_pos指定の場合は同じ場所で何回も取得することを許す
             self.actual_num_pos = self.num_pos
             self.actual_interval = np.linalg.norm(self.goal_pos - self.start_pos) / self.actual_num_pos
 
-        self.prepare_acquisition()
-        self.clear_things()
-        black = np.zeros([1024, 1024])
-        black[0, 0] = 1
-        self.contourplot.data = black
-        self.progress_scan_value = 0
-        self.prepare_scan()
-        self.disable_buttons()
-        self.start_progress_acquire()
-        self.start_progress_scan()
-        self.thread_scan = threading.Thread(target=self.scan)
-        self.thread_scan.daemon = True
-        self.thread_scan.start()
+        return True
 
-    def start_progress_acquire(self):
-        self.progress_acquire_value = -1 / self.integration / self.accumulation / 1.2
-        self.clock_acquire = Clock.schedule_interval(self.update_progress_acquire, 1)
+    def start_progress_bar_acquire(self):
+        # プログレスバーが動き始める
+        self.progress_bar_value_acquire = -1 / self.integration / self.accumulation / 1.2
+        self.clock_schedule_acquire = Clock.schedule_interval(self.update_progress_acquire, 1)
 
-    def start_progress_scan(self):
-        self.progress_scan_value = -1 / self.integration / self.accumulation / (self.actual_num_pos + 1) / 1.2
-        self.clock_scan = Clock.schedule_interval(self.update_progress_scan, 1)
+    def start_progress_bar_scan(self):
+        # プログレスバーが動き始める
+        self.progress_bar_value_scan = -1 / self.integration / self.accumulation / (self.actual_num_pos + 1) / 1.2
+        self.clock_schedule_scan = Clock.schedule_interval(self.update_progress_scan, 1)
 
     def disable_buttons(self):
         # 測定中はボタンを押させない
@@ -221,7 +220,7 @@ class RASDriver(BoxLayout):
         self.ydata = np.empty([0, self.xpixels])
         self.coord = np.empty([0, 3])
         self.lineplot.points = []
-        self.progress_acquire_value = 0
+        self.progress_bar_value_acquire = 0
 
     def initialize(self):
         # 初期化
@@ -245,6 +244,7 @@ class RASDriver(BoxLayout):
             self.xpixels = 1024
 
     def update_temperature(self):
+        # detectorの温度を監視し、規定の温度に下がっていれば
         if self.cl.mode == 'RELEASE':
             while True:
                 ret, temperature = self.sdk.GetTemperature()
@@ -263,6 +263,7 @@ class RASDriver(BoxLayout):
             self.ids.button_scan.disabled = False
 
     def update_graph_line(self):
+        # スペクトルを表示
         # TODO: show the spectrum accumulated
         ydata = self.ydata
         if self.cl.cosmic_ray_removal:
@@ -276,6 +277,7 @@ class RASDriver(BoxLayout):
         self.lineplot.points = [(x, y) for x, y in zip(self.xdata, ydata[-1])]
 
     def update_graph_contour(self):
+        # マップを表示
         # TODO: show the spectrum accumulated
         map_data = self.ydata
         if self.cl.cosmic_ray_removal:
@@ -287,9 +289,12 @@ class RASDriver(BoxLayout):
         self.contourplot.xrange = (0, self.xpixels - 1)
         self.contourplot.yrange = (0, len(self.ydata) - 1)
 
+        # なぜかわからないが[::-1]しないと正しく表示されない
         self.contourplot.data = map_data.reshape(self.ydata.shape[::-1])
 
     def update_position(self):
+        # 別スレッド内で動き続ける
+        # たまに座標の更新に数秒~10数秒のラグがあるのはなぜ？
         while True:
             self.hsc.get_position()
             msg = self.hsc.recv()
@@ -322,12 +327,14 @@ class RASDriver(BoxLayout):
         self.ids.button_scan.disabled = True
         self.validate_state_dict[name] = False
 
+        # 有効な数値か確認
         try:
             val_casted = dtype(val)
         except ValueError:
             self.msg = f'Invalid value at {name}.'
             return
 
+        # 数値の範囲を確認
         if validate(val_casted):
             self.msg = f'Set {name}.'
             exec("self.%s = %d" % (name, val_casted))
@@ -335,6 +342,7 @@ class RASDriver(BoxLayout):
             self.msg = f'Invalid value at {name}.'
             return
 
+        # 全ての値が正しければacquireボタンとscanボタンを使えるように
         if name not in self.validate_state_dict:
             raise KeyError(f'key: {name} does not exist in validate_state_dict')
         self.validate_state_dict[name] = True
@@ -370,6 +378,7 @@ class RASDriver(BoxLayout):
         self.apply_interval()
 
     def apply_interval(self):
+        # interval側がオンの時はnum_pos側はオフ
         state = self.ids.toggle_interval.state
         if state == 'down':
             self.ids.toggle_num_pos.state = 'normal'
@@ -386,9 +395,8 @@ class RASDriver(BoxLayout):
         self.ids.toggle_num_pos.state = 'down'
         self.apply_num_pos()
 
-        return True
-
     def apply_num_pos(self):
+        # num_pos側がオンの時はinterval側はオフ
         state = self.ids.toggle_num_pos.state
         if state == 'down':
             self.ids.toggle_interval.state = 'normal'
@@ -396,34 +404,49 @@ class RASDriver(BoxLayout):
             self.ids.toggle_interval.state = 'down'
 
     def update_progress_acquire(self, dt):
-        self.progress_acquire_value += 1 / self.integration / self.accumulation / 1.2  # prevent from exceeding
-        if self.progress_acquire_value > 1:
-            self.progress_acquire_value -= 1
+        # プログレスバーの更新
+        self.progress_bar_value_acquire += 1 / self.integration / self.accumulation / 1.2  # prevent from exceeding
+        if self.progress_bar_value_acquire > 1:
+            self.progress_bar_value_acquire -= 1
 
     def update_progress_scan(self, dt):
-        self.progress_scan_value += 1 / self.integration / self.accumulation / (self.actual_num_pos + 1) / 1.2  # prevent from exceeding
+        # プログレスバーの更新
+        self.progress_bar_value_scan += 1 / self.integration / self.accumulation / (self.actual_num_pos + 1) / 1.2  # prevent from exceeding
 
     def start_acquire(self):
+        # 直前のデータが保存されていない場合、ポップアップウィンドウで確認
         if self.saved_previous:
             self.create_and_start_thread_acquire()
             return
+        # 問題なければ開始
         self.popup_acquire.open()
 
     def start_scan(self):
+        # 直前のデータが保存されていない場合、ポップアップウィンドウで確認
         if self.saved_previous:
             self.create_and_start_thread_scan()
             return
+        # 問題なければ開始
         self.popup_scan.open()
 
     def _popup_yes_acquire(self):
+        # 「データを保存していませんが大丈夫ですか？」という
+        # ポップアップウィンドウでyesと答えるとacquire開始
         self.create_and_start_thread_acquire()
         self.popup_acquire.dismiss()
 
     def _popup_yes_scan(self):
+        # 「データを保存していませんが大丈夫ですか？」という
+        # ポップアップウィンドウでyesと答えるとスキャン開始
         self.create_and_start_thread_scan()
         self.popup_scan.dismiss()
 
     def prepare_acquisition(self):
+        # for GUI
+        self.clear_things()
+        self.disable_buttons()
+        self.start_progress_bar_acquire()
+        # for instruments
         if self.cl.mode == 'RELEASE':
             self.sdk.handle_return(self.sdk.SetAcquisitionMode(atmcd_codes.Acquisition_Mode.SINGLE_SCAN))
             self.sdk.handle_return(self.sdk.SetReadMode(atmcd_codes.Read_Mode.FULL_VERTICAL_BINNING))
@@ -454,13 +477,27 @@ class RASDriver(BoxLayout):
             self.update_graph_line()
 
         if not during_scan:
-            Clock.unschedule(self.clock_acquire)
+            Clock.unschedule(self.clock_schedule_acquire)
             self.activate_buttons()
-        self.progress_acquire_value = 1
+        self.progress_bar_value_acquire = 1
         self.saved_previous = False
         self.ids.button_save.disabled = False
 
     def prepare_scan(self):
+        # for GUI
+        self.clear_things()
+        black = np.zeros([1024, 1024])
+        black[0, 0] = 1
+        self.contourplot.data = black
+        self.progress_bar_value_scan = 0
+        self.disable_buttons()
+        self.start_progress_bar_acquire()
+        self.start_progress_bar_scan()
+        # for instruments
+        self.prepare_acquisition()
+        ok = self.set_interval_or_num_pos()
+        if not ok:
+            return
         self.hsc.set_speed_max()
         self.hsc.move_abs(self.start_pos)
         distance = np.max(self.current_pos - self.start_pos)
@@ -484,10 +521,11 @@ class RASDriver(BoxLayout):
             self.acquire(during_scan=True)
             self.update_graph_contour()
 
-        self.progress_acquire_value = 1
-        self.progress_scan_value = 1
-        Clock.unschedule(self.clock_acquire)
-        Clock.unschedule(self.clock_scan)
+        # 終了処理
+        self.progress_bar_value_acquire = 1
+        self.progress_bar_value_scan = 1
+        Clock.unschedule(self.clock_schedule_acquire)
+        Clock.unschedule(self.clock_schedule_scan)
         self.activate_buttons()
         self.saved_previous = False
         self.ids.button_save.disabled = False
