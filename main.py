@@ -551,7 +551,10 @@ class RASDriver(BoxLayout):
             f.write(f'# time: {now.strftime("%Y-%m-%d-%H-%M")}\n')
             f.write(f'# integration: {self.integration}\n')
             f.write(f'# accumulation: {self.accumulation}\n')
-            f.write(f'# interval: {self.interval}\n')
+            use_interval = self.ids.toggle_interval.state == 'down'
+            use_num_pos = self.ids.toggle_num_pos.state == 'down'
+            f.write(f'# interval: {use_interval} {self.interval}\n')
+            f.write(f'# num_pos: {use_num_pos} {self.num_pos}\n')
             f.write(f'pos_x,{",".join(self.coord[:, 0].astype(str))}\n')
             f.write(f'pos_y,{",".join(self.coord[:, 1].astype(str))}\n')
             f.write(f'pos_z,{",".join(self.coord[:, 2].astype(str))}\n')
