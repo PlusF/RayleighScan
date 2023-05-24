@@ -256,11 +256,7 @@ class RASDriver(BoxLayout):
             self.current_temperature = self.cl.temperature
         self.msg = 'Cooling finished.'
         self.validate_state_dict['temperature'] = True
-
-        # 他のパラメータも問題ない場合、スペクトル取得を許可
-        if all(self.validate_state_dict.values()):
-            self.ids.button_acquire.disabled = False
-            self.ids.button_scan.disabled = False
+        self.check_if_ready()
 
     def update_graph_line(self):
         # スペクトルを表示
@@ -342,14 +338,27 @@ class RASDriver(BoxLayout):
             self.msg = f'Invalid value at {name}.'
             return
 
-        # 全ての値が正しければacquireボタンとscanボタンを使えるように
         if name not in self.validate_state_dict:
             raise KeyError(f'key: {name} does not exist in validate_state_dict')
         self.validate_state_dict[name] = True
+        self.check_if_ready()
 
-        if all(self.validate_state_dict.values()):
+    def check_if_ready(self):
+        # 全ての値が正しければacquireボタンとscanボタンを使えるように
+        # interval指定駆動の時，intervalの値が正しい必要があるが，num_posは正しくなくても良い．逆もしかり．
+        use_interval = self.ids.toggle_interval.state == 'down'
+        use_num_pos = self.ids.toggle_num_pos.state == 'down'
+        interval_ok = (not use_interval) or (use_interval and self.validate_state_dict['interval'])
+        num_pos_ok = (not use_num_pos) or (use_num_pos and self.validate_state_dict['num_pos'])
+        keys_else = [key for key in self.validate_state_dict.keys() if key not in ['interval', 'num_pos']]
+        else_ok = all([self.validate_state_dict[key] for key in keys_else])
+
+        if interval_ok and num_pos_ok and else_ok:
             self.ids.button_acquire.disabled = False
             self.ids.button_scan.disabled = False
+        else:
+            self.ids.button_acquire.disabled = True
+            self.ids.button_scan.disabled = True
 
     def set_integration(self, val):
         self.set_param(
@@ -368,14 +377,14 @@ class RASDriver(BoxLayout):
         )
 
     def set_interval(self, val):
+        self.ids.toggle_interval.state = 'down'
+        self.apply_interval()
         self.set_param(
             name='interval',
             val=val,
             dtype=float,
             validate=lambda x: x > 0
         )
-        self.ids.toggle_interval.state = 'down'
-        self.apply_interval()
 
     def apply_interval(self):
         # interval側がオンの時はnum_pos側はオフ
@@ -384,16 +393,16 @@ class RASDriver(BoxLayout):
             self.ids.toggle_num_pos.state = 'normal'
         elif state == 'normal':
             self.ids.toggle_num_pos.state = 'down'
+        self.check_if_ready()
 
     def set_num_pos(self, val):
+        self.ids.toggle_num_pos.state = 'down'
+        self.apply_num_pos()
         self.set_param(
             name='num_pos',
             val=val,
             dtype=int,
             validate=lambda x: x > 0)
-
-        self.ids.toggle_num_pos.state = 'down'
-        self.apply_num_pos()
 
     def apply_num_pos(self):
         # num_pos側がオンの時はinterval側はオフ
@@ -402,6 +411,7 @@ class RASDriver(BoxLayout):
             self.ids.toggle_interval.state = 'normal'
         elif state == 'normal':
             self.ids.toggle_interval.state = 'down'
+        self.check_if_ready()
 
     def update_progress_acquire(self, dt):
         # プログレスバーの更新
@@ -509,7 +519,7 @@ class RASDriver(BoxLayout):
             self.msg = f'Acquisition {i + 1} of {self.actual_num_pos}... {time_left} minutes left. (interval: {self.actual_interval})'
 
             # 移動が必要なとき(同じ場所での測定では移動はいらない)
-            if self.actual_num_pos > 1:
+            if abs(self.actual_interval) > 0:
                 point = self.start_pos + (self.goal_pos - self.start_pos) * i / (self.actual_num_pos - 1)
                 if self.cl.mode == 'RELEASE':
                     self.hsc.move_abs(point)
