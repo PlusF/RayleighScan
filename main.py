@@ -432,7 +432,7 @@ class RASDriver(BoxLayout):
 
     def update_progress_scan(self, dt):
         # プログレスバーの更新
-        self.progress_bar_value_scan += 1 / self.integration / self.accumulation / (self.actual_num_pos + 1) / 1.2  # prevent from exceeding
+        self.progress_bar_value_scan += 1 / self.integration / self.accumulation / (self.actual_num_pos + 1)  # prevent from exceeding
 
     def start_acquire(self):
         # 直前のデータが保存されていない場合、ポップアップウィンドウで確認
