@@ -489,6 +489,7 @@ class RASDriver(BoxLayout):
         if not during_scan:
             Clock.unschedule(self.clock_schedule_acquire)
             self.activate_buttons()
+            self.msg = 'Acquisition finished.'
         self.progress_bar_value_acquire = 1
         self.saved_previous = False
         self.ids.button_save.disabled = False
