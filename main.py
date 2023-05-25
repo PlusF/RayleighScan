@@ -50,6 +50,7 @@ class RASDriver(BoxLayout):
     actual_interval = ObjectProperty(50)
     num_pos = ObjectProperty(10)
     actual_num_pos = ObjectProperty(10)
+    sleep_sec = ObjectProperty(0)
     msg = StringProperty('Please initialize the detector.')
 
     def __init__(self, **kwargs):
@@ -415,9 +416,17 @@ class RASDriver(BoxLayout):
             self.ids.toggle_interval.state = 'down'
         self.check_if_ready()
 
+    def set_sleep_sec(self, val):
+        self.set_param(
+            name='sleep_sec',
+            val=val,
+            dtype=float,
+            validate=lambda x: x >= 0
+        )
+
     def update_progress_acquire(self, dt):
         # プログレスバーの更新
-        self.progress_bar_value_acquire += 1 / self.integration / self.accumulation / 1.2  # prevent from exceeding
+        self.progress_bar_value_acquire += 1 / (self.integration * self.accumulation + self.sleep_sec) / 2  # prevent from exceeding
         if self.progress_bar_value_acquire > 1:
             self.progress_bar_value_acquire -= 1
 
@@ -492,9 +501,9 @@ class RASDriver(BoxLayout):
             Clock.unschedule(self.clock_schedule_acquire)
             self.activate_buttons()
             self.msg = 'Acquisition finished.'
-        self.progress_bar_value_acquire = 1
-        self.saved_previous = False
-        self.ids.button_save.disabled = False
+            self.progress_bar_value_acquire = 1
+            self.saved_previous = False
+            self.ids.button_save.disabled = False
 
     def prepare_scan(self):
         ok = self.set_interval_or_num_pos()
@@ -520,7 +529,7 @@ class RASDriver(BoxLayout):
 
     def scan(self):
         for i in range(self.actual_num_pos):
-            time_left = np.ceil((self.actual_num_pos - i) * self.integration * self.accumulation / 60)
+            time_left = np.ceil((self.actual_num_pos - i) * (self.integration * self.accumulation + self.sleep_sec) / 60)
             self.msg = f'Acquisition {i + 1} of {self.actual_num_pos}... {time_left} minutes left. (interval: {self.actual_interval})'
 
             # 移動が必要なとき(同じ場所での測定では移動はいらない)
@@ -535,6 +544,9 @@ class RASDriver(BoxLayout):
 
             self.acquire(during_scan=True)
             self.update_graph_contour()
+
+            self.msg = f'Sleeping... ({i + 1}/{self.actual_num_pos}, {time_left} minutes left.)'
+            time.sleep(self.sleep_sec)
 
         # 終了処理
         self.progress_bar_value_acquire = 1
