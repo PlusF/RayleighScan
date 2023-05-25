@@ -164,7 +164,9 @@ class RASDriver(BoxLayout):
 
     def create_and_start_thread_scan(self):
         # 画面が停止しないよう、スキャンは別スレッドを立てて行う
-        self.prepare_scan()
+        ok = self.prepare_scan()
+        if not ok:
+            return
         self.thread_scan = threading.Thread(target=self.scan)
         self.thread_scan.daemon = True
         self.thread_scan.start()
@@ -495,6 +497,9 @@ class RASDriver(BoxLayout):
         self.ids.button_save.disabled = False
 
     def prepare_scan(self):
+        ok = self.set_interval_or_num_pos()
+        if not ok:
+            return False
         # for GUI
         self.clear_things()
         black = np.zeros([1024, 1024])
@@ -506,13 +511,12 @@ class RASDriver(BoxLayout):
         self.start_progress_bar_scan()
         # for instruments
         self.prepare_acquisition()
-        ok = self.set_interval_or_num_pos()
-        if not ok:
-            return
         self.hsc.set_speed_max()
         self.hsc.move_abs(self.start_pos)
         distance = np.max(self.current_pos - self.start_pos)
         time.sleep(distance / self.hsc.max_speed + 1)
+
+        return True
 
     def scan(self):
         for i in range(self.actual_num_pos):
@@ -535,6 +539,7 @@ class RASDriver(BoxLayout):
         # 終了処理
         self.progress_bar_value_acquire = 1
         self.progress_bar_value_scan = 1
+        print('unschedule')
         Clock.unschedule(self.clock_schedule_acquire)
         Clock.unschedule(self.clock_schedule_scan)
         self.activate_buttons()
