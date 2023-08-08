@@ -94,19 +94,54 @@ class RASDriver(BoxLayout):
         self.ids.button_save.disabled = True
 
         self.saved_previous = True
-        self.popup_acquire = Popup(
-            title="Confirmation",
-            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_acquire, cancel=lambda: self.popup_acquire.dismiss()),
-            size_hint=(0.4, 0.3)
-        )
-        self.popup_scan = Popup(
-            title="Confirmation",
-            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_scan, cancel=lambda: self.popup_scan.dismiss()),
-            size_hint=(0.4, 0.3)
-        )
-        self.popup_save = Popup(
+        # self.unsaved_dialog_acquire = Popup(
+        #     title="Warning",
+        #     content=YesNoDialog(
+        #         message='Previous data is not saved. Proceed?',
+        #         yes=self.confirm_acquire_condition,
+        #         cancel=lambda: self.unsaved_dialog_acquire.dismiss()),
+        #     size_hint=(0.4, 0.3)
+        # )
+        # self.condition_dialog_acquire = Popup(
+        #     title="Single Acquisition",
+        #     content=YesNoDialog(
+        #         message=f'Integration: {self.integration} sec\nAccumulation: {self.accumulation}\nProceed?',
+        #         yes=self.start_acquire,
+        #         cancel=lambda: self.condition_dialog_acquire.dismiss()),
+        #     size_hint=(0.4, 0.4)
+        # )
+        # self.unsaved_dialog_scan = Popup(
+        #     title="Warning",
+        #     content=YesNoDialog(
+        #         message='Previous data is not saved. Proceed?',
+        #         yes=self.confirm_scan_condition,
+        #         cancel=lambda: self.unsaved_dialog_scan.dismiss()),
+        #     size_hint=(0.4, 0.3)
+        # )
+        # self.condition_dialog_scan_interval = Popup(
+        #     title="Scan",
+        #     content=YesNoDialog(
+        #         message=f'Integration: {self.integration} sec\nAccumulation: {self.accumulation}\n'
+        #                 f'Interval: {self.interval} um\nProceed?',
+        #         yes=self.start_scan,
+        #         cancel=lambda: self.condition_dialog_scan_interval.dismiss()),
+        #     size_hint=(0.4, 0.3)
+        # )
+        # self.condition_dialog_scan_num_pos = Popup(
+        #     title="Scan",
+        #     content=YesNoDialog(
+        #         message=f'Integration: {self.integration} sec\nAccumulation: {self.accumulation}\n'
+        #                 f'Number of positions: {self.num_pos}\nProceed?',
+        #         yes=self.start_scan,
+        #         cancel=lambda: self.condition_dialog_scan_num_pos.dismiss()),
+        #     size_hint=(0.4, 0.3)
+        # )
+        self.save_dialog = Popup(
             title="Save file",
-            content=SaveDialog(save=self.save, cancel=lambda: self.popup_save.dismiss(), folder=self.folder),
+            content=SaveDialog(
+                save=self.save,
+                cancel=lambda: self.save_dialog.dismiss(),
+                folder=self.folder),
             size_hint=(0.9, 0.9)
         )
 
@@ -444,33 +479,84 @@ class RASDriver(BoxLayout):
         # プログレスバーの更新
         self.progress_bar_value_scan += 1 / self.integration / self.accumulation / (self.actual_num_pos + 1)  # prevent from exceeding
 
+    def create_yesno_dialog(self, title, message, yes_func):
+        self.dialog = Popup(
+            title=title,
+            content=YesNoDialog(
+                message=message,
+                yes=yes_func,
+                cancel=lambda: self.dialog.dismiss()),
+            size_hint=(0.4, 0.4)
+        )
+        self.dialog.open()
+
+    def acquire_clicked(self):
+        if not self.saved_previous:
+            # 直前のデータが保存されていない場合確認ダイアログを出す
+            self.create_yesno_dialog(
+                title='Save previous data?',
+                message='Previous data is not saved.\nOK?',
+                yes_func=self.confirm_acquire_condition,
+            )
+            # self.unsaved_dialog_acquire.open()
+            return
+        self.confirm_acquire_condition()
+
+    def scan_clicked(self):
+        if not self.saved_previous:
+            # 直前のデータが保存されていない場合確認ダイアログを出す
+            self.create_yesno_dialog(
+                title='Save previous data?',
+                message='Previous data is not saved.\nOK?',
+                yes_func=self.confirm_scan_condition,
+            )
+            return
+        self.confirm_scan_condition()
+
+    def get_condition_str_acquire(self):
+        return 'Integration: {} [s]\nAccumulation: {}'.format(self.integration, self.accumulation)
+
+    def get_condition_str_scan(self):
+        if self.ids.toggle_interval.state == 'down':
+            return 'Integration: {} [s]\nAccumulation: {}\nInterval: {} [um]'.format(
+                self.integration, self.accumulation, self.interval
+            )
+        else:
+            return 'Integration: {} [s]\nAccumulation: {}\nNumber of positions: {}'.format(
+                self.integration, self.accumulation, self.num_pos
+            )
+
+    def confirm_acquire_condition(self):
+        # 保存の確認ダイアログが開いていたら閉じる
+        if not self.saved_previous:
+            self.dialog.dismiss()
+        # 露光時間・積算回数の確認ダイアログ
+        self.create_yesno_dialog(
+            title='Start acquire?',
+            message=self.get_condition_str_acquire(),
+            yes_func=self.start_acquire,
+        )
+
+    def confirm_scan_condition(self):
+        # 保存の確認ダイアログが開いていたら閉じる
+        if not self.saved_previous:
+            self.dialog.dismiss()
+        # 露光時間・積算回数・測定距離間隔・測定個所の数の確認ダイアログ
+        self.create_yesno_dialog(
+            title='Start scan?',
+            message=self.get_condition_str_scan(),
+            yes_func=self.start_scan,
+        )
+
     def start_acquire(self):
-        # 直前のデータが保存されていない場合、ポップアップウィンドウで確認
-        if self.saved_previous:
-            self.create_and_start_thread_acquire()
-            return
-        # 問題なければ開始
-        self.popup_acquire.open()
-
-    def start_scan(self):
-        # 直前のデータが保存されていない場合、ポップアップウィンドウで確認
-        if self.saved_previous:
-            self.create_and_start_thread_scan()
-            return
-        # 問題なければ開始
-        self.popup_scan.open()
-
-    def _popup_yes_acquire(self):
-        # 「データを保存していませんが大丈夫ですか？」という
+        self.dialog.dismiss()
         # ポップアップウィンドウでyesと答えるとacquire開始
         self.create_and_start_thread_acquire()
-        self.popup_acquire.dismiss()
 
-    def _popup_yes_scan(self):
-        # 「データを保存していませんが大丈夫ですか？」という
+    def start_scan(self):
+        self.dialog.dismiss()
         # ポップアップウィンドウでyesと答えるとスキャン開始
         self.create_and_start_thread_scan()
-        self.popup_scan.dismiss()
 
     def prepare_acquisition(self):
         # for GUI
@@ -526,7 +612,6 @@ class RASDriver(BoxLayout):
         self.contourplot.data = black
         self.progress_bar_value_scan = 0
         self.disable_buttons()
-        self.start_progress_bar_acquire()
         self.start_progress_bar_scan()
         # for instruments
         self.prepare_acquisition()
@@ -589,9 +674,9 @@ class RASDriver(BoxLayout):
             for x, y in zip(self.xdata.astype(str), self.ydata.T.astype(str)):
                 f.write(f'{x},{",".join(y)}\n')
 
-        self.popup_save.dismiss()
+        self.save_dialog.dismiss()
         self.saved_previous = True
-        self.popup_save.folder = path
+        self.save_dialog.folder = path
         self.msg = f'Successfully saved to "{os.path.join(path, filename)}".'
 
     def quit(self, instance):
