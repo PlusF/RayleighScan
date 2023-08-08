@@ -583,7 +583,7 @@ class RASDriver(BoxLayout):
                 self.sdk.handle_return(ret)
             elif self.cl.mode == 'DEBUG':
                 time.sleep(self.integration)
-                print(f'acquired {i}')
+                print(f'acquired {i + 1}')
                 spec = np.expand_dims(np.sin(np.linspace(-np.pi, np.pi, self.xpixels)), axis=0) * np.random.randint(1, 10)
                 noise = np.random.random(self.xpixels) * 10
                 cosmic_ray = np.zeros(self.xpixels)
