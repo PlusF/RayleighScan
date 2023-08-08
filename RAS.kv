@@ -1,6 +1,6 @@
 #:kivy 1.0.9
 
-<YesNoDialog>:
+<YesNoDialogContent>:
     RelativeLayout:
         pos_hint: {'x': 0.5, 'y':0.5}
         Label:
@@ -18,7 +18,7 @@
             text: 'Cancel'
             on_release: root.cancel()
 
-<SaveDialog>:
+<SaveDialogContent>:
     BoxLayout:
         size: root.size
         pos: root.pos
@@ -41,6 +41,17 @@
             Button:
                 text: "Cancel"
                 on_release: root.cancel()
+
+<ErrorDialogContent>:
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        Label:
+            text: root.message
+        Button:
+            text: "OK"
+            on_release: root.ok()
 
 <RASDriver>:
     orientation: 'horizontal'

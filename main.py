@@ -25,7 +25,7 @@ from utils import remove_cosmic_ray
 
 
 # データの保存先を指定するダイアログ
-class SaveDialog(FloatLayout):
+class SaveDialogContent(FloatLayout):
     save = ObjectProperty(None)
     text_input = ObjectProperty(None)
     cancel = ObjectProperty(None)
@@ -33,10 +33,16 @@ class SaveDialog(FloatLayout):
 
 
 # 保存していない状態で次の測定を始めてもよいか確認するダイアログ
-class YesNoDialog(FloatLayout):
+class YesNoDialogContent(FloatLayout):
     message = ObjectProperty(None)
     yes = ObjectProperty(None)
     cancel = ObjectProperty(None)
+
+
+# エラーを表示するダイアログ
+class ErrorDialogContent(FloatLayout):
+    message = ObjectProperty(None)
+    ok = ObjectProperty(None)
 
 
 class RASDriver(BoxLayout):
@@ -94,55 +100,21 @@ class RASDriver(BoxLayout):
         self.ids.button_save.disabled = True
 
         self.saved_previous = True
-        # self.unsaved_dialog_acquire = Popup(
-        #     title="Warning",
-        #     content=YesNoDialog(
-        #         message='Previous data is not saved. Proceed?',
-        #         yes=self.confirm_acquire_condition,
-        #         cancel=lambda: self.unsaved_dialog_acquire.dismiss()),
-        #     size_hint=(0.4, 0.3)
-        # )
-        # self.condition_dialog_acquire = Popup(
-        #     title="Single Acquisition",
-        #     content=YesNoDialog(
-        #         message=f'Integration: {self.integration} sec\nAccumulation: {self.accumulation}\nProceed?',
-        #         yes=self.start_acquire,
-        #         cancel=lambda: self.condition_dialog_acquire.dismiss()),
-        #     size_hint=(0.4, 0.4)
-        # )
-        # self.unsaved_dialog_scan = Popup(
-        #     title="Warning",
-        #     content=YesNoDialog(
-        #         message='Previous data is not saved. Proceed?',
-        #         yes=self.confirm_scan_condition,
-        #         cancel=lambda: self.unsaved_dialog_scan.dismiss()),
-        #     size_hint=(0.4, 0.3)
-        # )
-        # self.condition_dialog_scan_interval = Popup(
-        #     title="Scan",
-        #     content=YesNoDialog(
-        #         message=f'Integration: {self.integration} sec\nAccumulation: {self.accumulation}\n'
-        #                 f'Interval: {self.interval} um\nProceed?',
-        #         yes=self.start_scan,
-        #         cancel=lambda: self.condition_dialog_scan_interval.dismiss()),
-        #     size_hint=(0.4, 0.3)
-        # )
-        # self.condition_dialog_scan_num_pos = Popup(
-        #     title="Scan",
-        #     content=YesNoDialog(
-        #         message=f'Integration: {self.integration} sec\nAccumulation: {self.accumulation}\n'
-        #                 f'Number of positions: {self.num_pos}\nProceed?',
-        #         yes=self.start_scan,
-        #         cancel=lambda: self.condition_dialog_scan_num_pos.dismiss()),
-        #     size_hint=(0.4, 0.3)
-        # )
         self.save_dialog = Popup(
             title="Save file",
-            content=SaveDialog(
+            content=SaveDialogContent(
                 save=self.save,
                 cancel=lambda: self.save_dialog.dismiss(),
                 folder=self.folder),
             size_hint=(0.9, 0.9)
+        )
+        self.error_dialog = Popup(
+            title="Error",
+            content=ErrorDialogContent(
+                message='Check the condition again.',
+                ok=lambda: self.error_dialog.dismiss(),
+            ),
+            size_hint=(0.4, 0.4)
         )
 
         self.open_ports()
@@ -223,12 +195,14 @@ class RASDriver(BoxLayout):
         use_num_pos = self.ids.toggle_num_pos.state == 'down'
         if use_interval:
             if self.interval == 0:
-                self.msg = 'Check the interval value again.'
+                self.msg = 'Check the num_pos value again.'
+                self.error_dialog.open()
                 return False
             # interval指定でscanするときは、num_posが2以上にならなければいけない
             self.actual_num_pos = int(np.linalg.norm(self.goal_pos - self.start_pos) // self.interval + 1)
             if self.actual_num_pos <= 1:
                 self.msg = 'Check the interval value again.'
+                self.error_dialog.open()
                 return False
             self.actual_interval = self.interval
         elif use_num_pos:
@@ -482,7 +456,7 @@ class RASDriver(BoxLayout):
     def create_yesno_dialog(self, title, message, yes_func):
         self.dialog = Popup(
             title=title,
-            content=YesNoDialog(
+            content=YesNoDialogContent(
                 message=message,
                 yes=yes_func,
                 cancel=lambda: self.dialog.dismiss()),
