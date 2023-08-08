@@ -12,7 +12,7 @@ from kivy.core.window import Window, Clock
 import os
 if os.name == 'nt':
     from pyAndorSDK2 import atmcd, atmcd_codes, atmcd_errors
-else:
+else:  # Macで開発する際エラーが出ないようにする
     atmcd = atmcd_codes = atmcd_errors = None
 import numpy as np
 import datetime
@@ -24,6 +24,7 @@ from hsc103controller import HSC103Controller
 from utils import remove_cosmic_ray
 
 
+# データの保存先を指定するダイアログ
 class SaveDialog(FloatLayout):
     save = ObjectProperty(None)
     text_input = ObjectProperty(None)
@@ -31,6 +32,7 @@ class SaveDialog(FloatLayout):
     folder = StringProperty('')
 
 
+# 保存していない状態で次の測定を始めてもよいか確認するダイアログ
 class YesNoDialog(FloatLayout):
     message = ObjectProperty(None)
     yes = ObjectProperty(None)
@@ -44,12 +46,19 @@ class RASDriver(BoxLayout):
     goal_pos = ObjectProperty(np.zeros(3), force_dispatch=True)
     progress_bar_value_acquire = ObjectProperty(0)
     progress_bar_value_scan = ObjectProperty(0)
+    # 露光時間
     integration = ObjectProperty(30)
+    # 積算回数
     accumulation = ObjectProperty(3)
+    # 測定間隔(距離）
     interval = ObjectProperty(50)
+    # num_posを指定したときの実際の測定間隔
     actual_interval = ObjectProperty(50)
+    # 測定する位置の数
     num_pos = ObjectProperty(10)
+    # intervalを指定したときの実際の測定位置の数
     actual_num_pos = ObjectProperty(10)
+    # 測定間のスリープ時間
     sleep_sec = ObjectProperty(0)
     msg = StringProperty('Please initialize the detector.')
 
@@ -69,6 +78,7 @@ class RASDriver(BoxLayout):
         self.ydata = np.array([])
         self.coord = np.array([])
 
+        # 測定開始可能かどうかのフラグ
         self.validate_state_dict = {
             'temperature': False,
             'integration': True,
@@ -86,17 +96,17 @@ class RASDriver(BoxLayout):
         self.saved_previous = True
         self.popup_acquire = Popup(
             title="Confirmation",
-            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_acquire, cancel=lambda:self.popup_acquire.dismiss()),
+            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_acquire, cancel=lambda: self.popup_acquire.dismiss()),
             size_hint=(0.4, 0.3)
         )
         self.popup_scan = Popup(
             title="Confirmation",
-            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_scan, cancel=lambda:self.popup_scan.dismiss()),
+            content=YesNoDialog(message='Previous data is not saved. Proceed?', yes=self._popup_yes_scan, cancel=lambda: self.popup_scan.dismiss()),
             size_hint=(0.4, 0.3)
         )
         self.popup_save = Popup(
             title="Save file",
-            content=SaveDialog(save=self.save, cancel=lambda:self.popup_save.dismiss(), folder=self.folder),
+            content=SaveDialog(save=self.save, cancel=lambda: self.popup_save.dismiss(), folder=self.folder),
             size_hint=(0.9, 0.9)
         )
 
