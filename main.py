@@ -5,9 +5,10 @@ from kivy.properties import NumericProperty, StringProperty, ObjectProperty
 from kivy.uix.popup import Popup
 from kivy_garden.graph import Graph, LinePlot, ContourPlot
 from kivy.config import Config
-Config.set('graphics', 'width', '1000')
-Config.set('graphics', 'height', '500')
+Config.set('graphics', 'width', '1200')
+Config.set('graphics', 'height', '600')
 from kivy.core.window import Window, Clock
+from CircularProgressBar import CircularProgressBar
 
 import os
 if os.name == 'nt':
@@ -50,8 +51,8 @@ class RASDriver(BoxLayout):
     start_pos = ObjectProperty(np.zeros(3), force_dispatch=True)
     current_pos = ObjectProperty(np.zeros(3), force_dispatch=True)
     goal_pos = ObjectProperty(np.zeros(3), force_dispatch=True)
-    progress_bar_value_acquire = ObjectProperty(0)
-    progress_bar_value_scan = ObjectProperty(0)
+    progress_value_acquire = NumericProperty(0)
+    progress_value_scan = NumericProperty(0)
     # 露光時間
     integration = ObjectProperty(30)
     # 積算回数
@@ -167,13 +168,13 @@ class RASDriver(BoxLayout):
         self.thread_pos.daemon = True
         self.thread_pos.start()
 
-    def create_and_start_thread_cool(self):
+    def create_and_start_thread_cooling(self):
         # 画面が停止しないよう、温度の監視は別スレッドを立てて行う
         self.thread_cool = threading.Thread(target=self.update_temperature)
         self.thread_cool.daemon = True
         self.thread_cool.start()
 
-    def create_and_start_thread_acquire(self):
+    def create_and_start_thread_acquisition(self):
         # 画面が停止しないよう、acquireは別スレッドを立てて行う
         self.prepare_acquisition()
         self.thread_acq = threading.Thread(target=self.acquire)
@@ -212,16 +213,6 @@ class RASDriver(BoxLayout):
 
         return True
 
-    def start_progress_bar_acquire(self):
-        # プログレスバーが動き始める
-        self.progress_bar_value_acquire = -1 / self.integration / self.accumulation / 1.2
-        self.clock_schedule_acquire = Clock.schedule_interval(self.update_progress_acquire, 1)
-
-    def start_progress_bar_scan(self):
-        # プログレスバーが動き始める
-        self.progress_bar_value_scan = -1 / self.integration / self.accumulation / (self.actual_num_pos + 1) / 1.2
-        self.clock_schedule_scan = Clock.schedule_interval(self.update_progress_scan, 1)
-
     def disable_buttons(self):
         # 測定中はボタンを押させない
         self.ids.button_acquire.disabled = True
@@ -242,7 +233,6 @@ class RASDriver(BoxLayout):
         self.ydata = np.empty([0, self.xpixels])
         self.coord = np.empty([0, 3])
         self.lineplot.points = []
-        self.progress_bar_value_acquire = 0
 
     def initialize(self):
         # 初期化
@@ -257,7 +247,7 @@ class RASDriver(BoxLayout):
                 return
         elif self.cl.mode == 'DEBUG':
             self.ids.button_initialize.disabled = True
-        self.create_and_start_thread_cool()
+        self.create_and_start_thread_cooling()
 
         if self.cl.mode == 'RELEASE':
             ret, self.xpixels, ypixels = self.sdk.GetDetector()
@@ -408,15 +398,6 @@ class RASDriver(BoxLayout):
             validate=lambda x: x > 0
         )
 
-    def apply_interval(self):
-        # interval側がオンの時はnum_pos側はオフ
-        state = self.ids.toggle_interval.state
-        if state == 'down':
-            self.ids.toggle_num_pos.state = 'normal'
-        elif state == 'normal':
-            self.ids.toggle_num_pos.state = 'down'
-        self.check_if_ready()
-
     def set_num_pos(self, val):
         self.ids.toggle_num_pos.state = 'down'
         self.apply_num_pos()
@@ -425,6 +406,15 @@ class RASDriver(BoxLayout):
             val=val,
             dtype=int,
             validate=lambda x: x > 0)
+
+    def apply_interval(self):
+        # interval側がオンの時はnum_pos側はオフ
+        state = self.ids.toggle_interval.state
+        if state == 'down':
+            self.ids.toggle_num_pos.state = 'normal'
+        elif state == 'normal':
+            self.ids.toggle_num_pos.state = 'down'
+        self.check_if_ready()
 
     def apply_num_pos(self):
         # num_pos側がオンの時はinterval側はオフ
@@ -442,16 +432,6 @@ class RASDriver(BoxLayout):
             dtype=float,
             validate=lambda x: x >= 0
         )
-
-    def update_progress_acquire(self, dt):
-        # プログレスバーの更新
-        self.progress_bar_value_acquire += 1 / (self.integration * self.accumulation + self.sleep_sec) / 2  # prevent from exceeding
-        if self.progress_bar_value_acquire > 1:
-            self.progress_bar_value_acquire -= 1
-
-    def update_progress_scan(self, dt):
-        # プログレスバーの更新
-        self.progress_bar_value_scan += 1 / self.integration / self.accumulation / (self.actual_num_pos + 1)  # prevent from exceeding
 
     def create_yesno_dialog(self, title, message, yes_func):
         self.dialog = Popup(
@@ -488,15 +468,15 @@ class RASDriver(BoxLayout):
         self.confirm_scan_condition()
 
     def get_condition_str_acquire(self):
-        return 'Integration: {} [s]\nAccumulation: {}'.format(self.integration, self.accumulation)
+        return 'Integration: {} sec\nAccumulation: {}'.format(self.integration, self.accumulation)
 
     def get_condition_str_scan(self):
         if self.ids.toggle_interval.state == 'down':
-            return 'Integration: {} [s]\nAccumulation: {}\nInterval: {} [um]'.format(
+            return 'Integration: {} sec\nAccumulation: {}\nInterval: {} um'.format(
                 self.integration, self.accumulation, self.interval
             )
         else:
-            return 'Integration: {} [s]\nAccumulation: {}\nNumber of positions: {}'.format(
+            return 'Integration: {} sec\nAccumulation: {}\nNumber of positions: {}'.format(
                 self.integration, self.accumulation, self.num_pos
             )
 
@@ -525,7 +505,7 @@ class RASDriver(BoxLayout):
     def start_acquire(self):
         self.dialog.dismiss()
         # ポップアップウィンドウでyesと答えるとacquire開始
-        self.create_and_start_thread_acquire()
+        self.create_and_start_thread_acquisition()
 
     def start_scan(self):
         self.dialog.dismiss()
@@ -536,7 +516,8 @@ class RASDriver(BoxLayout):
         # for GUI
         self.clear_things()
         self.disable_buttons()
-        self.start_progress_bar_acquire()
+        self.ids.progress_acquire.max = self.accumulation
+        self.progress_value_acquire = 0
         # for instruments
         if self.cl.mode == 'RELEASE':
             self.sdk.handle_return(self.sdk.SetAcquisitionMode(atmcd_codes.Acquisition_Mode.SINGLE_SCAN))
@@ -567,11 +548,12 @@ class RASDriver(BoxLayout):
             self.coord = np.append(self.coord, self.current_pos.reshape([1, 3]), axis=0)
             self.update_graph_line()
 
+            self.progress_value_acquire = i + 1
+
         if not during_scan:
             Clock.unschedule(self.clock_schedule_acquire)
             self.activate_buttons()
             self.msg = 'Acquisition finished.'
-            self.progress_bar_value_acquire = 1
             self.saved_previous = False
             self.ids.button_save.disabled = False
 
@@ -584,9 +566,8 @@ class RASDriver(BoxLayout):
         black = np.zeros([1024, 1024])
         black[0, 0] = 1
         self.contourplot.data = black
-        self.progress_bar_value_scan = 0
+        self.ids.progress_scan.max = self.actual_num_pos
         self.disable_buttons()
-        self.start_progress_bar_scan()
         # for instruments
         self.prepare_acquisition()
         self.hsc.set_speed_max()
@@ -614,15 +595,12 @@ class RASDriver(BoxLayout):
             self.acquire(during_scan=True)
             self.update_graph_contour()
 
+            self.progress_value_scan = i + 1
+
             self.msg = f'Sleeping... ({i + 1}/{self.actual_num_pos}, {time_left} minutes left.)'
             time.sleep(self.sleep_sec)
 
         # 終了処理
-        self.progress_bar_value_acquire = 1
-        self.progress_bar_value_scan = 1
-        print('unschedule')
-        Clock.unschedule(self.clock_schedule_acquire)
-        Clock.unschedule(self.clock_schedule_scan)
         self.activate_buttons()
         self.saved_previous = False
         self.ids.button_save.disabled = False

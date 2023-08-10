@@ -213,16 +213,32 @@
                 pos_hint: {'center_y': 0.5}
                 multiline: False
                 on_text: root.set_sleep_sec(input_sleep_sec.text)
-        Button:
-            id: button_acquire
-            text: 'Acquire'
+        BoxLayout:
             size_hint_y: 0.2
-            on_release: root.acquire_clicked()
-        Button:
-            id: button_scan
-            text: 'Start Scan'
+            orientation: 'horizontal'
+            Button:
+                id: button_acquire
+                text: 'Acquire'
+                on_release: root.acquire_clicked()
+            FloatLayout:
+                size_hint_x: 0
+                CircularProgressBar
+                    id: progress_acquire
+                    value: root.progress_value_acquire
+                    pos: self.parent.pos[0] - 100, self.parent.pos[1] + 5
+        BoxLayout:
             size_hint_y: 0.2
-            on_release: root.scan_clicked()
+            orientation: 'horizontal'
+            Button:
+                id: button_scan
+                text: 'Start Scan'
+                on_release: root.scan_clicked()
+            FloatLayout:
+                size_hint_x: 0
+                CircularProgressBar
+                    id: progress_scan
+                    value: root.progress_value_scan
+                    pos: self.parent.pos[0] - 100, self.parent.pos[1] + 5
         Button:
             id: button_save
             text: 'Save'
@@ -232,26 +248,11 @@
     BoxLayout:
         orientation: 'vertical'
         BoxLayout:
-            id: graph_line
-            size_hint: 1, 1
-
-        BoxLayout:
-            id: graph_contour
-            size_hint: 1, 1
-
-        ProgressBar:
-            id: progress_acquire
-            value: root.progress_bar_value_acquire
-            min: 0
-            max: 1
-            size_hint_y: 0.05
-
-        ProgressBar:
-            id: progress_scan
-            value: root.progress_bar_value_scan
-            min: 0
-            max: 1
-            size_hint_y: 0.05
+            orientation: 'horizontal'
+            BoxLayout:
+                id: graph_line
+            BoxLayout:
+                id: graph_contour
 
         Label:
             text: root.msg
