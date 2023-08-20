@@ -7,7 +7,7 @@ from kivy_garden.graph import Graph, LinePlot, ContourPlot
 from kivy.config import Config
 Config.set('graphics', 'width', '1200')
 Config.set('graphics', 'height', '600')
-from kivy.core.window import Window, Clock
+from kivy.core.window import Window
 from CircularProgressBar import CircularProgressBar
 
 import os
@@ -551,7 +551,6 @@ class RASDriver(BoxLayout):
             self.progress_value_acquire = i + 1
 
         if not during_scan:
-            Clock.unschedule(self.clock_schedule_acquire)
             self.activate_buttons()
             self.msg = 'Acquisition finished.'
             self.saved_previous = False
