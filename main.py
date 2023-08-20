@@ -283,6 +283,7 @@ class RASDriver(BoxLayout):
         self.graph_line.ymin = float(np.min(ydata[-1]))
         self.graph_line.ymax = float(max(np.max(ydata[-1]), np.min(ydata[-1]) + 0.1))
         self.lineplot.points = [(x, y) for x, y in zip(self.xdata, ydata[-1])]
+        self.graph_line.y_ticks_major = float(np.max(ydata[-1]) - np.min(ydata[-1])) / 5
 
     def update_graph_contour(self):
         # マップを表示
